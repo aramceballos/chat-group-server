@@ -1,8 +1,11 @@
 package main
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+)
 
-type Group struct {
+type Channel struct {
 	Id        string `json:"id"`
 	Name      string `json:"name"`
 	ImageURL  string `json:"image_url"`
@@ -22,13 +25,13 @@ type User struct {
 type Message struct {
 	Id        string `json:"id"`
 	UserId    string `json:"user_id"`
-	GroupId   string `json:"group_id"`
+	ChannelId string `json:"channel_id"`
 	Content   string `json:"content"`
 	CreatedAt string `json:"created_at"`
 }
 
 func main() {
-	groups := []Group{
+	channels := []Channel{
 		{
 			Id:        "1",
 			Name:      "Front-End Developers",
@@ -105,6 +108,10 @@ func main() {
 
 	app := fiber.New()
 
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "http://localhost:3000",
+	}))
+
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).SendString("Hello world")
 	})
@@ -115,19 +122,19 @@ func main() {
 
 	v1.Get("/users", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "Ok",
+			"status": "ok",
 			"data":   users,
 		})
 	})
-	v1.Get("/groups", func(c *fiber.Ctx) error {
+	v1.Get("/channels", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "Ok",
-			"data":   groups,
+			"status": "ok",
+			"data":   channels,
 		})
 	})
 	v1.Get("/messages", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "Ok",
+			"status": "ok",
 			"data":   messages,
 		})
 	})
