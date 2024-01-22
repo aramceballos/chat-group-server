@@ -45,6 +45,7 @@ type Message struct {
 	ChannelId string `json:"channel_id"`
 	Content   string `json:"content"`
 	CreatedAt string `json:"created_at"`
+	User      User   `json:"user,omitempty"`
 }
 
 type Membership struct {
@@ -144,6 +145,7 @@ func main() {
 		})
 	})
 	v1.Get("/channels/:id", func(c *fiber.Ctx) error {
+		// Get requested channel data
 		channel := Channel{}
 		err := db.QueryRow("SELECT id, name, description, image_url FROM channels WHERE id = $1", c.Params("id")).Scan(&channel.Id, &channel.Name, &channel.Description, &channel.ImageURL)
 		if err != nil {
@@ -153,6 +155,7 @@ func main() {
 			})
 		}
 
+		// Get members in the requested channel and append it to the struct
 		rows, err := db.Query("SELECT id, user_id, channel_id FROM memberships WHERE channel_id = $1", c.Params("id"))
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -160,9 +163,7 @@ func main() {
 				"message": err.Error(),
 			})
 		}
-
 		memberships := []Membership{}
-
 		for rows.Next() {
 			membership := Membership{}
 			err := rows.Scan(&membership.Id, &membership.UserId, &membership.ChannelId)
@@ -174,7 +175,6 @@ func main() {
 			}
 			memberships = append(memberships, membership)
 		}
-
 		for _, membership := range memberships {
 			user := User{}
 			err := db.QueryRow("SELECT id, name, avatar_url, created_at FROM users WHERE id = $1", membership.UserId).Scan(&user.Id, &user.Name, &user.AvatarUrl, &user.CreatedAt)
@@ -187,6 +187,7 @@ func main() {
 			channel.Members = append(channel.Members, user)
 		}
 
+		// Get messages in the requested channel and append it to the struct
 		rows, err = db.Query("SELECT id, user_id, channel_id, content, created_at FROM messages WHERE channel_id = $1", c.Params("id"))
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -194,7 +195,6 @@ func main() {
 				"message": err.Error(),
 			})
 		}
-
 		for rows.Next() {
 			message := Message{}
 			err := rows.Scan(&message.Id, &message.UserId, &message.ChannelId, &message.Content, &message.CreatedAt)
@@ -204,6 +204,19 @@ func main() {
 					"message": err.Error(),
 				})
 			}
+
+			// Get user data and append it to the message struct
+			user := User{}
+			err = db.QueryRow("SELECT id, name, avatar_url, created_at FROM users WHERE id = $1", message.UserId).Scan(&user.Id, &user.Name, &user.AvatarUrl, &user.CreatedAt)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"status":  "error",
+					"message": err.Error(),
+				})
+			}
+
+			message.User = user
+
 			channel.Messages = append(channel.Messages, message)
 		}
 
