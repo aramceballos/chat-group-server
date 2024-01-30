@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/aramceballos/chat-group-server/api/routes"
+	"github.com/aramceballos/chat-group-server/pkg/channel"
+	"github.com/aramceballos/chat-group-server/pkg/entities"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 
@@ -18,41 +21,6 @@ const (
 	password = "mysecretpassword"
 	dbname   = "postgres"
 )
-
-type Channel struct {
-	Id          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	ImageURL    string    `json:"image_url"`
-	CreatedAt   string    `json:"created_at,omitempty"`
-	Members     []User    `json:"members,omitempty"`
-	Messages    []Message `json:"messages,omitempty"`
-}
-
-type User struct {
-	Id        int    `json:"id"`
-	Name      string `json:"name"`
-	UserName  string `json:"user_name"`
-	Email     string `json:"email"`
-	Password  string `json:"-"`
-	AvatarUrl string `json:"avatar_url"`
-	CreatedAt string `json:"created_at"`
-}
-
-type Message struct {
-	Id        string `json:"id"`
-	UserId    string `json:"user_id"`
-	ChannelId string `json:"channel_id"`
-	Content   string `json:"content"`
-	CreatedAt string `json:"created_at"`
-	User      User   `json:"user,omitempty"`
-}
-
-type Membership struct {
-	Id        int `json:"id"`
-	UserId    int `json:"user_id"`
-	ChannelId int `json:"channel_id"`
-}
 
 // Database instance
 var db *sql.DB
@@ -76,6 +44,9 @@ func main() {
 
 	app := fiber.New()
 
+	channelRepo := channel.NewRepository(db)
+	channelService := channel.NewService(channelRepo)
+
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000",
 	}))
@@ -97,11 +68,11 @@ func main() {
 			})
 		}
 		defer rows.Close()
-		result := []User{}
+		result := []entities.User{}
 
 		for rows.Next() {
-			user := User{}
-			err := rows.Scan(&user.Id, &user.Name, &user.AvatarUrl, &user.CreatedAt)
+			user := entities.User{}
+			err := rows.Scan(&user.ID, &user.Name, &user.AvatarURL, &user.CreatedAt)
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"status":  "error",
@@ -116,115 +87,8 @@ func main() {
 			"data":   result,
 		})
 	})
-	v1.Get("/channels", func(c *fiber.Ctx) error {
-		rows, err := db.Query("SELECT id, name, description, image_url FROM channels")
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		}
 
-		result := []Channel{}
-
-		for rows.Next() {
-			channel := Channel{}
-			err := rows.Scan(&channel.Id, &channel.Name, &channel.Description, &channel.ImageURL)
-			if err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"status":  "error",
-					"message": err.Error(),
-				})
-			}
-			result = append(result, channel)
-		}
-
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   result,
-		})
-	})
-	v1.Get("/channels/:id", func(c *fiber.Ctx) error {
-		// Get requested channel data
-		channel := Channel{}
-		err := db.QueryRow("SELECT id, name, description, image_url FROM channels WHERE id = $1", c.Params("id")).Scan(&channel.Id, &channel.Name, &channel.Description, &channel.ImageURL)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		}
-
-		// Get members in the requested channel and append it to the struct
-		rows, err := db.Query("SELECT id, user_id, channel_id FROM memberships WHERE channel_id = $1", c.Params("id"))
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		}
-		memberships := []Membership{}
-		for rows.Next() {
-			membership := Membership{}
-			err := rows.Scan(&membership.Id, &membership.UserId, &membership.ChannelId)
-			if err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"status":  "error",
-					"message": err.Error(),
-				})
-			}
-			memberships = append(memberships, membership)
-		}
-		for _, membership := range memberships {
-			user := User{}
-			err := db.QueryRow("SELECT id, name, avatar_url, created_at FROM users WHERE id = $1", membership.UserId).Scan(&user.Id, &user.Name, &user.AvatarUrl, &user.CreatedAt)
-			if err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"status":  "error",
-					"message": err.Error(),
-				})
-			}
-			channel.Members = append(channel.Members, user)
-		}
-
-		// Get messages in the requested channel and append it to the struct
-		rows, err = db.Query("SELECT id, user_id, channel_id, content, created_at FROM messages WHERE channel_id = $1", c.Params("id"))
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		}
-		for rows.Next() {
-			message := Message{}
-			err := rows.Scan(&message.Id, &message.UserId, &message.ChannelId, &message.Content, &message.CreatedAt)
-			if err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"status":  "error",
-					"message": err.Error(),
-				})
-			}
-
-			// Get user data and append it to the message struct
-			user := User{}
-			err = db.QueryRow("SELECT id, name, avatar_url, created_at FROM users WHERE id = $1", message.UserId).Scan(&user.Id, &user.Name, &user.AvatarUrl, &user.CreatedAt)
-			if err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"status":  "error",
-					"message": err.Error(),
-				})
-			}
-
-			message.User = user
-
-			channel.Messages = append(channel.Messages, message)
-		}
-
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   channel,
-		})
-	})
+	routes.ChannelRouter(v1, channelService)
 
 	app.Listen(":4000")
 }
