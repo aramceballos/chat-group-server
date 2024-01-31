@@ -7,7 +7,7 @@ import (
 
 	"github.com/aramceballos/chat-group-server/api/routes"
 	"github.com/aramceballos/chat-group-server/pkg/channel"
-	"github.com/aramceballos/chat-group-server/pkg/entities"
+	"github.com/aramceballos/chat-group-server/pkg/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 
@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	host     = "localhost"
-	port     = 5432
-	user     = "postgres"
-	password = "mysecretpassword"
-	dbname   = "postgres"
+	dbHost     = "localhost"
+	dbPort     = 5432
+	dbUser     = "postgres"
+	dbPassword = "mysecretpassword"
+	dbName     = "postgres"
 )
 
 // Database instance
@@ -27,7 +27,7 @@ var db *sql.DB
 
 func Connect() error {
 	var err error
-	db, err = sql.Open("postgres", fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname))
+	db, err = sql.Open("postgres", fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPassword, dbName))
 	if err != nil {
 		return err
 	}
@@ -44,6 +44,9 @@ func main() {
 
 	app := fiber.New()
 
+	userRepo := user.NewRepository(db)
+	userService := user.NewService(userRepo)
+
 	channelRepo := channel.NewRepository(db)
 	channelService := channel.NewService(channelRepo)
 
@@ -59,34 +62,7 @@ func main() {
 
 	v1 := api.Group("/v1")
 
-	v1.Get("/users", func(c *fiber.Ctx) error {
-		rows, err := db.Query("SELECT id, name, avatar_url, created_at FROM users")
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		}
-		defer rows.Close()
-		result := []entities.User{}
-
-		for rows.Next() {
-			user := entities.User{}
-			err := rows.Scan(&user.ID, &user.Name, &user.AvatarURL, &user.CreatedAt)
-			if err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"status":  "error",
-					"message": err.Error(),
-				})
-			}
-			result = append(result, user)
-		}
-
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   result,
-		})
-	})
+	routes.UserRouter(v1, userService)
 
 	routes.ChannelRouter(v1, channelService)
 
