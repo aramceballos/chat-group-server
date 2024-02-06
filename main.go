@@ -9,6 +9,7 @@ import (
 
 	"github.com/aramceballos/chat-group-server/api/routes"
 	"github.com/aramceballos/chat-group-server/pkg/channel"
+	"github.com/aramceballos/chat-group-server/pkg/entities"
 	"github.com/aramceballos/chat-group-server/pkg/user"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
@@ -55,10 +56,6 @@ type Client struct {
 
 var channels = make(map[int64]map[*websocket.Conn]*Client)
 
-func chatProcess() {
-
-}
-
 func main() {
 	if err := Connect(); err != nil {
 		log.Fatal(err)
@@ -73,15 +70,8 @@ func main() {
 	channelService := channel.NewService(channelRepo)
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "http://localhost:3000",
+		AllowOrigins: "*",
 	}))
-
-	app.Use("/chat", func(c *fiber.Ctx) error {
-		if websocket.IsWebSocketUpgrade(c) {
-			return c.Next()
-		}
-		return c.SendStatus(fiber.StatusUpgradeRequired)
-	})
 
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).SendString("Hello world")
@@ -90,6 +80,13 @@ func main() {
 	api := app.Group("/api")
 
 	v1 := api.Group("/v1")
+
+	v1.Use("/chat", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			return c.Next()
+		}
+		return c.SendStatus(fiber.StatusUpgradeRequired)
+	})
 
 	routes.UserRouter(v1, userService)
 
@@ -139,8 +136,9 @@ func main() {
 				continue
 			}
 
+			insertedMessage := entities.Message{}
 			// Insert message into database
-			_, err = db.Exec("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, $3)", channelId, 1, string(msg.Content))
+			err = db.QueryRow("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, $3) RETURNING id, user_id, channel_id, content, created_at", channelId, 1, string(msg.Content)).Scan(&insertedMessage.ID, &insertedMessage.UserID, &insertedMessage.ChannelID, &insertedMessage.Content, &insertedMessage.CreatedAt)
 			if err != nil {
 				errorMessage := Result{
 					Success: false,
@@ -153,6 +151,24 @@ func main() {
 				}
 				continue
 			}
+
+			// Query user from database to populate the message
+			user := entities.User{}
+			err = db.QueryRow("SELECT id, name, avatar_url, created_at FROM users WHERE id = $1", 1).Scan(&user.ID, &user.Name, &user.AvatarURL, &user.CreatedAt)
+			if err != nil {
+				errorMessage := Result{
+					Success: false,
+					Message: err.Error(),
+				}
+				err = c.WriteJSON(errorMessage)
+				if err != nil {
+					log.Println("write error:", err)
+					break
+				}
+				continue
+			}
+			insertedMessage.User = user
+			fmt.Println("Message sent successfully", insertedMessage)
 
 			res := Result{
 				Success: true,
@@ -178,7 +194,7 @@ func main() {
 						return
 					}
 
-					err = conn.WriteJSON(msg)
+					err = conn.WriteJSON(insertedMessage)
 					if err != nil {
 						cl.isClosing = true
 						log.Println("write error:", err)
