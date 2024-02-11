@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/aramceballos/chat-group-server/api/routes"
+	"github.com/aramceballos/chat-group-server/pkg/auth"
 	"github.com/aramceballos/chat-group-server/pkg/channel"
 	"github.com/aramceballos/chat-group-server/pkg/entities"
 	"github.com/aramceballos/chat-group-server/pkg/user"
@@ -69,6 +70,9 @@ func main() {
 	channelRepo := channel.NewRepository(db)
 	channelService := channel.NewService(channelRepo)
 
+	authRepo := auth.NewRepository(db)
+	authService := auth.NewService(authRepo)
+
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 	}))
@@ -81,16 +85,16 @@ func main() {
 
 	v1 := api.Group("/v1")
 
+	routes.UserRouter(v1, userService)
+	routes.ChannelRouter(v1, channelService)
+	routes.AuthRouter(v1, authService)
+
 	v1.Use("/chat", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			return c.Next()
 		}
 		return c.SendStatus(fiber.StatusUpgradeRequired)
 	})
-
-	routes.UserRouter(v1, userService)
-
-	routes.ChannelRouter(v1, channelService)
 
 	v1.Get("/chat/:channelId", websocket.New(func(c *websocket.Conn) {
 		channelId := c.Params("channelId")
