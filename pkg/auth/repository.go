@@ -9,6 +9,7 @@ import (
 type Repository interface {
 	GetUserByEmail(email string) (*entities.User, error)
 	GetUserByUsername(username string) (*entities.User, error)
+	CreateUser(user entities.User) error
 }
 
 type repository struct {
@@ -39,4 +40,13 @@ func (r *repository) GetUserByUsername(username string) (*entities.User, error) 
 	}
 
 	return &user, nil
+}
+
+func (r *repository) CreateUser(user entities.User) error {
+	_, err := r.db.Exec("INSERT INTO users (name, email, username, password, avatar_url) VALUES ($1, $2, $3, $4, $5)", user.Name, user.Email, user.UserName, user.Password, user.AvatarURL)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

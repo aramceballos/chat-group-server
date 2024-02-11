@@ -30,3 +30,28 @@ func Login(service auth.Service) fiber.Handler {
 		})
 	}
 }
+
+func Signup(service auth.Service) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var input entities.SignupInput
+		if err := c.BodyParser(&input); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+			})
+		}
+
+		token, err := service.Signup(input)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+			})
+		}
+
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"status": "ok",
+			"data":   token,
+		})
+	}
+}

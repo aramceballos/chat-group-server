@@ -22,6 +22,7 @@ func valid(email string) bool {
 
 type Service interface {
 	Login(input entities.LoginInput) (string, error)
+	Signup(input entities.SignupInput) (string, error)
 }
 
 type service struct {
@@ -78,6 +79,60 @@ func (s *service) Login(input entities.LoginInput) (string, error) {
 	claims := token.Claims.(jwt.MapClaims)
 	claims["username"] = ud.UserName
 	claims["user_id"] = ud.ID
+	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
+
+	t, err := token.SignedString([]byte("secret"))
+	if err != nil {
+		return "", err
+	}
+
+	return t, nil
+}
+
+func (s *service) Signup(input entities.SignupInput) (string, error) {
+	user := entities.User{
+		Name:      input.Name,
+		UserName:  input.UserName,
+		Email:     input.Email,
+		Password:  input.Password,
+		AvatarURL: input.AvatarURL,
+	}
+
+	if user.Name == "" || user.UserName == "" || user.Email == "" || user.Password == "" {
+		return "", errors.New("all fields are required")
+	}
+
+	if !valid(user.Email) {
+		return "", errors.New("invalid email")
+	}
+
+	_, err := s.repo.GetUserByEmail(user.Email)
+	if err == nil {
+		return "", errors.New("email already in use")
+	}
+
+	_, err = s.repo.GetUserByUsername(user.UserName)
+	if err == nil {
+		return "", errors.New("username already in use")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+
+	user.Password = string(hash)
+
+	err = s.repo.CreateUser(user)
+	if err != nil {
+		return "", err
+	}
+
+	token := jwt.New(jwt.SigningMethodHS256)
+
+	claims := token.Claims.(jwt.MapClaims)
+	claims["username"] = user.UserName
+	claims["user_id"] = user.ID
 	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
 
 	t, err := token.SignedString([]byte("secret"))

@@ -8,4 +8,5 @@ import (
 
 func AuthRouter(app fiber.Router, service auth.Service) {
 	app.Post("/auth/login", handlers.Login(service))
+	app.Post("/auth/signup", handlers.Signup(service))
 }
