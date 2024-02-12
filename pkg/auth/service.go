@@ -45,7 +45,7 @@ func (s *service) Login(input entities.LoginInput) (string, error) {
 	if valid(identity) {
 		email, err = s.repo.GetUserByEmail(identity)
 		if err != nil {
-			return "", err
+			return "", errors.New("user not found")
 		}
 		ud = entities.UserData{
 			ID:       email.ID,
@@ -56,7 +56,7 @@ func (s *service) Login(input entities.LoginInput) (string, error) {
 	} else {
 		user, err = s.repo.GetUserByUsername(identity)
 		if err != nil {
-			return "", err
+			return "", errors.New("user not found")
 		}
 		ud = entities.UserData{
 			ID:       user.ID,
