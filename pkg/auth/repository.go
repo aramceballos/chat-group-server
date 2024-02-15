@@ -24,7 +24,7 @@ func NewRepository(db *sql.DB) Repository {
 
 func (r *repository) GetUserByEmail(email string) (*entities.User, error) {
 	var user entities.User
-	err := r.db.QueryRow("SELECT id, name, email, password FROM users WHERE email = $1", email).Scan(&user.ID, &user.Name, &user.Email, &user.Password)
+	err := r.db.QueryRow("SELECT id, name, username, email, password FROM users WHERE email = $1", email).Scan(&user.ID, &user.Name, &user.UserName, &user.Email, &user.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func (r *repository) GetUserByEmail(email string) (*entities.User, error) {
 
 func (r *repository) GetUserByUsername(username string) (*entities.User, error) {
 	var user entities.User
-	err := r.db.QueryRow("SELECT id, name, email, password FROM users WHERE username = $1", username).Scan(&user.ID, &user.Name, &user.Email, &user.Password)
+	err := r.db.QueryRow("SELECT id, name, username, email, password FROM users WHERE username = $1", username).Scan(&user.ID, &user.Name, &user.UserName, &user.Email, &user.Password)
 	if err != nil {
 		return nil, err
 	}
