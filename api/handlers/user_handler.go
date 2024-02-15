@@ -21,3 +21,21 @@ func GetUsers(service user.Service) fiber.Handler {
 		})
 	}
 }
+
+func GetUserById(service user.Service) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		userId := c.Params("id")
+		user, err := service.FetchUserById(userId)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+			})
+		}
+
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"status": "ok",
+			"data":   user,
+		})
+	}
+}
