@@ -9,6 +9,7 @@ import (
 type Repository interface {
 	FetchUsers() ([]entities.User, error)
 	FetchUserById(id string) (entities.User, error)
+	UpdateUser(userId string, user entities.UpdateUserInput) error
 }
 
 type repository struct {
@@ -57,4 +58,13 @@ func (r *repository) FetchUserById(id string) (entities.User, error) {
 		user.Email = email.String
 	}
 	return user, nil
+}
+
+func (r *repository) UpdateUser(userId string, user entities.UpdateUserInput) error {
+	_, err := r.db.Exec("UPDATE users SET name = $1, username = $2, email = $3 WHERE id = $4", user.Name, user.Username, user.Email, userId)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -9,3 +9,9 @@ type User struct {
 	AvatarURL string `json:"avatar_url"`
 	CreatedAt string `json:"created_at"`
 }
+
+type UpdateUserInput struct {
+	Name     string `json:"name" validate:"required,min=5" error:"name is required"`
+	Username string `json:"username" validate:"required,min=5,max=20" error:"username is required"`
+	Email    string `json:"email" validate:"required,min=5" error:"email is required"`
+}
