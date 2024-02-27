@@ -23,6 +23,7 @@ func valid(email string) bool {
 type Service interface {
 	Login(input entities.LoginInput) (string, error)
 	Signup(input entities.SignupInput) (string, error)
+	Me(userId string) (entities.User, error)
 }
 
 type service struct {
@@ -141,4 +142,13 @@ func (s *service) Signup(input entities.SignupInput) (string, error) {
 	}
 
 	return t, nil
+}
+
+func (s *service) Me(userId string) (entities.User, error) {
+	user, err := s.repo.GetUserById(userId)
+	if err != nil {
+		return entities.User{}, err
+	}
+
+	return *user, nil
 }
