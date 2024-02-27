@@ -2,6 +2,7 @@ package user
 
 import (
 	"database/sql"
+	"errors"
 
 	"github.com/aramceballos/chat-group-server/pkg/entities"
 )
@@ -61,7 +62,24 @@ func (r *repository) FetchUserById(id string) (entities.User, error) {
 }
 
 func (r *repository) UpdateUser(userId string, user entities.UpdateUserInput) error {
-	_, err := r.db.Exec("UPDATE users SET name = $1, username = $2, email = $3 WHERE id = $4", user.Name, user.Username, user.Email, userId)
+	var existingUser entities.User
+	err := r.db.QueryRow("SELECT id FROM users WHERE email = $1 AND id != $2", user.Email, userId).Scan(&existingUser.ID)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if existingUser.ID != 0 {
+		return errors.New("a user with this email already exists")
+	}
+
+	err = r.db.QueryRow("SELECT id FROM users WHERE username = $1 AND id != $2", user.Username, userId).Scan(&existingUser.ID)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if existingUser.ID != 0 {
+		return errors.New("a user with this username already exists")
+	}
+
+	_, err = r.db.Exec("UPDATE users SET name = $1, username = $2, email = $3 WHERE id = $4", user.Name, user.Username, user.Email, userId)
 	if err != nil {
 		return err
 	}
