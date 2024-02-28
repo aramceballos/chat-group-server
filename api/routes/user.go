@@ -10,5 +10,5 @@ import (
 func UserRouter(app fiber.Router, service user.Service) {
 	app.Get("/users", handlers.GetUsers(service))
 	app.Get("/users/:id", handlers.GetUserById(service))
-	app.Put("/users/", middleware.Protected(), handlers.UpdateUser(service))
+	app.Put("/user/", middleware.Protected(), handlers.UpdateUser(service))
 }
