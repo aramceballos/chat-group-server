@@ -20,3 +20,8 @@ type UserData struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
+
+type ChangePasswordInput struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}

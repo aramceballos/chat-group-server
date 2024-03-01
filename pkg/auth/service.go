@@ -24,6 +24,7 @@ type Service interface {
 	Login(input entities.LoginInput) (string, error)
 	Signup(input entities.SignupInput) (string, error)
 	Me(userId string) (entities.User, error)
+	ChangePassword(userId string, input entities.ChangePasswordInput) error
 }
 
 type service struct {
@@ -151,4 +152,27 @@ func (s *service) Me(userId string) (entities.User, error) {
 	}
 
 	return *user, nil
+}
+
+func (s *service) ChangePassword(userId string, input entities.ChangePasswordInput) error {
+	user, err := s.repo.GetUserById(userId)
+	if err != nil {
+		return err
+	}
+
+	if !CheckPasswordHash(input.OldPassword, user.Password) {
+		return errors.New("invalid password")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	err = s.repo.ChangePassword(userId, string(hash))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

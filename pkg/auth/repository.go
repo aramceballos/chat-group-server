@@ -11,6 +11,7 @@ type Repository interface {
 	GetUserByEmail(email string) (*entities.User, error)
 	GetUserByUsername(username string) (*entities.User, error)
 	CreateUser(user entities.User) error
+	ChangePassword(userId string, password string) error
 }
 
 type repository struct {
@@ -27,7 +28,7 @@ func (r *repository) GetUserById(id string) (*entities.User, error) {
 	var user entities.User
 	var username sql.NullString
 	var email sql.NullString
-	err := r.db.QueryRow("SELECT id, name, username, email, avatar_url, created_at FROM users WHERE id = $1", id).Scan(&user.ID, &user.Name, &username, &email, &user.AvatarURL, &user.CreatedAt)
+	err := r.db.QueryRow("SELECT id, name, username, email, password, avatar_url, created_at FROM users WHERE id = $1", id).Scan(&user.ID, &user.Name, &username, &email, &user.Password, &user.AvatarURL, &user.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +66,15 @@ func (r *repository) GetUserByUsername(username string) (*entities.User, error) 
 
 func (r *repository) CreateUser(user entities.User) error {
 	_, err := r.db.Exec("INSERT INTO users (name, email, username, password, avatar_url) VALUES ($1, $2, $3, $4, $5)", user.Name, user.Email, user.UserName, user.Password, user.AvatarURL)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *repository) ChangePassword(userId string, password string) error {
+	_, err := r.db.Exec("UPDATE users SET password = $1 WHERE id = $2", password, userId)
 	if err != nil {
 		return err
 	}
