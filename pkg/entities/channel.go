@@ -9,3 +9,9 @@ type Channel struct {
 	Members     []User    `json:"members,omitempty"`
 	Messages    []Message `json:"messages,omitempty"`
 }
+
+type CreateChannelInput struct {
+	Name        string `json:"name" validate:"required"`
+	Description string `json:"description" validate:"required"`
+	ImageURL    string `json:"ImageURL"`
+}

@@ -7,6 +7,7 @@ import (
 type Service interface {
 	FetchChannels() ([]entities.Channel, error)
 	FetchChannelById(id string) (entities.Channel, error)
+	CreateChannel(channel entities.CreateChannelInput) error
 }
 
 type service struct {
@@ -35,4 +36,8 @@ func (s *service) FetchChannelById(id string) (entities.Channel, error) {
 	}
 
 	return channel, nil
+}
+
+func (s *service) CreateChannel(channel entities.CreateChannelInput) error {
+	return s.repo.CreateChannel(channel)
 }

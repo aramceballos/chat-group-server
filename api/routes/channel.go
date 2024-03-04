@@ -9,4 +9,5 @@ import (
 func ChannelRouter(app fiber.Router, service channel.Service) {
 	app.Get("/channels", handlers.GetChannels(service))
 	app.Get("/channels/:id", handlers.GetChannelById(service))
+	app.Post("/channel", handlers.CreateChannel(service))
 }

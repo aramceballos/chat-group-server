@@ -9,6 +9,7 @@ import (
 type Repository interface {
 	FetchChannels() ([]entities.Channel, error)
 	FetchChannelById(id string) (entities.Channel, error)
+	CreateChannel(channel entities.CreateChannelInput) error
 }
 
 type repository struct {
@@ -49,6 +50,7 @@ func (r *repository) FetchChannelById(channelId string) (entities.Channel, error
 			c.image_url AS channel_image_url,
 			m.id AS membership_id,
 			m.user_id AS membership_user_id,
+			m.role AS membership_role,
 			COALESCE(u1.name, '') AS membership_user_name,
 			COALESCE(u1.avatar_url, '') AS membership_user_avatar_url,
 			COALESCE(u1.created_at::text, '') AS membership_user_created_at,
@@ -81,18 +83,18 @@ func (r *repository) FetchChannelById(channelId string) (entities.Channel, error
 	// Iterate through the rows
 	for rows.Next() {
 		var (
-			channelID, messageID                                                                               int
-			membershipID, membershipUserID                                                                     sql.NullInt64
-			channelName, channelDescription, channelImageURL                                                   string
-			messageUserID                                                                                      int64
-			membershipUserName, membershipUserAvatarURL, messageUserAvatarURL, messageContent, messageUserName string
-			membershipUserCreatedAt, messageUserCreatedAt, messageCreatedAt                                    string
+			channelID, messageID                                                                                               int
+			membershipID, membershipUserID                                                                                     sql.NullInt64
+			channelName, channelDescription, channelImageURL                                                                   string
+			messageUserID                                                                                                      int64
+			membershipRole, membershipUserName, membershipUserAvatarURL, messageUserAvatarURL, messageContent, messageUserName string
+			membershipUserCreatedAt, messageUserCreatedAt, messageCreatedAt                                                    string
 		)
 
 		// Scan the values into variables
 		if err := rows.Scan(
 			&channelID, &channelName, &channelDescription, &channelImageURL,
-			&membershipID, &membershipUserID, &membershipUserName, &membershipUserAvatarURL, &membershipUserCreatedAt,
+			&membershipID, &membershipUserID, &membershipRole, &membershipUserName, &membershipUserAvatarURL, &membershipUserCreatedAt,
 			&messageID, &messageUserID, &messageUserName, &messageUserAvatarURL, &messageUserCreatedAt,
 			&messageContent, &messageCreatedAt,
 		); err != nil {
@@ -121,6 +123,7 @@ func (r *repository) FetchChannelById(channelId string) (entities.Channel, error
 						ID:        membershipUserID.Int64,
 						Name:      membershipUserName,
 						AvatarURL: membershipUserAvatarURL,
+						Role:      membershipRole,
 						CreatedAt: membershipUserCreatedAt,
 					},
 				}
@@ -156,4 +159,9 @@ func (r *repository) FetchChannelById(channelId string) (entities.Channel, error
 	}
 
 	return channel, nil
+}
+
+func (r *repository) CreateChannel(channel entities.CreateChannelInput) error {
+	_, err := r.db.Exec("INSERT INTO channels (name, description, image_url) VALUES ($1, $2, $3)", channel.Name, channel.Description, channel.ImageURL)
+	return err
 }
