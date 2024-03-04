@@ -15,3 +15,7 @@ type CreateChannelInput struct {
 	Description string `json:"description" validate:"required"`
 	ImageURL    string `json:"ImageURL"`
 }
+
+type JoinChannelInput struct {
+	ChannelID string `json:"channel_id"`
+}

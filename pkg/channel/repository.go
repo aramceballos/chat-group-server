@@ -10,6 +10,7 @@ type Repository interface {
 	FetchChannels() ([]entities.Channel, error)
 	FetchChannelById(id string) (entities.Channel, error)
 	CreateChannel(channel entities.CreateChannelInput) error
+	JoinChannel(userId string, input entities.JoinChannelInput) error
 }
 
 type repository struct {
@@ -163,5 +164,10 @@ func (r *repository) FetchChannelById(channelId string) (entities.Channel, error
 
 func (r *repository) CreateChannel(channel entities.CreateChannelInput) error {
 	_, err := r.db.Exec("INSERT INTO channels (name, description, image_url) VALUES ($1, $2, $3)", channel.Name, channel.Description, channel.ImageURL)
+	return err
+}
+
+func (r *repository) JoinChannel(userId string, input entities.JoinChannelInput) error {
+	_, err := r.db.Exec("INSERT INTO memberships (user_id, channel_id, role) VALUES ($1, $2, 'user')", userId, input.ChannelID)
 	return err
 }

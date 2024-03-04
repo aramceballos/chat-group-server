@@ -8,6 +8,7 @@ type Service interface {
 	FetchChannels() ([]entities.Channel, error)
 	FetchChannelById(id string) (entities.Channel, error)
 	CreateChannel(channel entities.CreateChannelInput) error
+	JoinChannel(userId string, input entities.JoinChannelInput) error
 }
 
 type service struct {
@@ -40,4 +41,8 @@ func (s *service) FetchChannelById(id string) (entities.Channel, error) {
 
 func (s *service) CreateChannel(channel entities.CreateChannelInput) error {
 	return s.repo.CreateChannel(channel)
+}
+
+func (s *service) JoinChannel(userId string, input entities.JoinChannelInput) error {
+	return s.repo.JoinChannel(userId, input)
 }

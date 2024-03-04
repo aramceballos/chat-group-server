@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"fmt"
+
 	"github.com/aramceballos/chat-group-server/pkg/channel"
 	"github.com/aramceballos/chat-group-server/pkg/entities"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func GetChannels(service channel.Service) fiber.Handler {
@@ -77,6 +80,49 @@ func CreateChannel(service channel.Service) fiber.Handler {
 		return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 			"status":  "ok",
 			"message": "channel created",
+			"data":    nil,
+		})
+	}
+}
+
+func JoinChannel(service channel.Service) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var input entities.JoinChannelInput
+		if err := c.BodyParser(&input); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+				"data":    nil,
+			})
+		}
+
+		validate := validator.New()
+		err := validate.Struct(input)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+				"data":    nil,
+			})
+		}
+
+		// Get bearer token
+		token := c.Locals("user").(*jwt.Token)
+		claims := token.Claims.(jwt.MapClaims)
+		userId := claims["user_id"].(float64)
+
+		err = service.JoinChannel(fmt.Sprintf("%v", userId), input)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"status":  "ok",
+				"message": err.Error(),
+				"data":    nil,
+			})
+		}
+
+		return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+			"status":  "ok",
+			"message": "joined to channel",
 			"data":    nil,
 		})
 	}
