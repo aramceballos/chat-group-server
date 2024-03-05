@@ -2,6 +2,8 @@ package channel
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 
 	"github.com/aramceballos/chat-group-server/pkg/entities"
 )
@@ -168,6 +170,15 @@ func (r *repository) CreateChannel(channel entities.CreateChannelInput) error {
 }
 
 func (r *repository) JoinChannel(userId string, input entities.JoinChannelInput) error {
-	_, err := r.db.Exec("INSERT INTO memberships (user_id, channel_id, role) VALUES ($1, $2, 'user')", userId, input.ChannelID)
+	var existingMembershipID int64
+	err := r.db.QueryRow("SELECT id FROM memberships WHERE user_id = $1 AND channel_id = $2", userId, input.ChannelID).Scan(&existingMembershipID)
+	fmt.Println("id:", existingMembershipID)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if existingMembershipID != 0 {
+		return errors.New("membership already exists")
+	}
+	_, err = r.db.Exec("INSERT INTO memberships (user_id, channel_id, role) VALUES ($1, $2, 'user')", userId, input.ChannelID)
 	return err
 }
