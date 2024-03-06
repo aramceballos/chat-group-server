@@ -13,6 +13,7 @@ type Repository interface {
 	FetchChannelById(id string) (entities.Channel, error)
 	CreateChannel(channel entities.CreateChannelInput) error
 	JoinChannel(userId string, input entities.JoinChannelInput) error
+	LeaveChannel(userId string, input entities.JoinChannelInput) error
 }
 
 type repository struct {
@@ -180,5 +181,10 @@ func (r *repository) JoinChannel(userId string, input entities.JoinChannelInput)
 		return errors.New("membership already exists")
 	}
 	_, err = r.db.Exec("INSERT INTO memberships (user_id, channel_id, role) VALUES ($1, $2, 'user')", userId, input.ChannelID)
+	return err
+}
+
+func (r *repository) LeaveChannel(userId string, input entities.JoinChannelInput) error {
+	_, err := r.db.Exec("DELETE FROM memberships WHERE user_id = $1 AND channel_id = $2", userId, input.ChannelID)
 	return err
 }
