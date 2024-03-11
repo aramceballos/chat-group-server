@@ -17,6 +17,7 @@ func Login(service auth.Service) fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
@@ -25,12 +26,14 @@ func Login(service auth.Service) fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   token,
+			"status":  "success",
+			"message": "logged in succesfully",
+			"data":    token,
 		})
 	}
 }
@@ -42,6 +45,7 @@ func Signup(service auth.Service) fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
@@ -50,12 +54,14 @@ func Signup(service auth.Service) fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   token,
+			"status":  "success",
+			"message": "signed up succesfully",
+			"data":    token,
 		})
 	}
 }
@@ -71,12 +77,14 @@ func Me(service auth.Service) fiber.Handler {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   user,
+			"status":  "success",
+			"message": "information retrieved succesfully",
+			"data":    user,
 		})
 	}
 }
@@ -88,6 +96,7 @@ func ChangePassword(service auth.Service) fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
@@ -98,6 +107,7 @@ func ChangePassword(service auth.Service) fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
@@ -112,12 +122,14 @@ func ChangePassword(service auth.Service) fiber.Handler {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   "password changed",
+			"status":  "success",
+			"message": "password changed succesfully",
+			"data":    nil,
 		})
 	}
 }

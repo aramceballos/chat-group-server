@@ -17,12 +17,14 @@ func GetChannels(service channel.Service) fiber.Handler {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   channels,
+			"status":  "success",
+			"message": "channels retrieved",
+			"data":    channels,
 		})
 	}
 
@@ -36,12 +38,14 @@ func GetChannelById(service channel.Service) fiber.Handler {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   channel,
+			"status":  "success",
+			"message": "channel retrieved",
+			"data":    channel,
 		})
 	}
 }
@@ -78,7 +82,7 @@ func CreateChannel(service channel.Service) fiber.Handler {
 		}
 
 		return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-			"status":  "ok",
+			"status":  "success",
 			"message": "channel created",
 			"data":    nil,
 		})
@@ -114,14 +118,14 @@ func JoinChannel(service channel.Service) fiber.Handler {
 		err = service.JoinChannel(fmt.Sprintf("%v", userId), input)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"status":  "ok",
+				"status":  "error",
 				"message": err.Error(),
 				"data":    nil,
 			})
 		}
 
 		return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-			"status":  "ok",
+			"status":  "success",
 			"message": "joined to channel",
 			"data":    nil,
 		})
@@ -163,7 +167,7 @@ func LeaveChannel(service channel.Service) fiber.Handler {
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status":  "ok",
+			"status":  "success",
 			"message": "channel left",
 			"data":    nil,
 		})

@@ -17,12 +17,14 @@ func GetUsers(service user.Service) fiber.Handler {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   users,
+			"status":  "success",
+			"message": "users retrieved",
+			"data":    users,
 		})
 	}
 }
@@ -35,12 +37,14 @@ func GetUserById(service user.Service) fiber.Handler {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   user,
+			"status":  "success",
+			"message": "user retrieved",
+			"data":    user,
 		})
 	}
 }
@@ -52,6 +56,7 @@ func UpdateUser(service user.Service) fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
@@ -62,6 +67,7 @@ func UpdateUser(service user.Service) fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
@@ -78,12 +84,14 @@ func UpdateUser(service user.Service) fiber.Handler {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),
+				"data":    nil,
 			})
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"data":   "user",
+			"status":  "success",
+			"message": "user updated",
+			"data":    nil,
 		})
 	}
 }
