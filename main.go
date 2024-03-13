@@ -28,7 +28,7 @@ type Result struct {
 }
 
 const (
-	dbHost     = "localhost"
+	dbHost     = "postgres"
 	dbPort     = 5432
 	dbUser     = "postgres"
 	dbPassword = "mysecretpassword"

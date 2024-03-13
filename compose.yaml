@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres_db
+    restart: always
+    volumes:
+     - ./pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"  # Expose PostgreSQL port
+
+  go_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go_app
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: mysecretpassword
+      DB_NAME: postgres
+    ports:
+      - "4000:4000"  # Expose Go app port
