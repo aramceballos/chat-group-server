@@ -1,7 +1,7 @@
 version: '3'
 
 services:
-  postgres:
+  postgres_old:
     image: postgres:16-alpine
     container_name: postgres_db
     restart: always
@@ -13,6 +13,17 @@ services:
       POSTGRES_DB: postgres
     ports:
       - "5432:5432"  # Expose PostgreSQL port
+
+  postgres_new:
+    build: './database'
+    container_name: postgres_db_new
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"  # Expose PostgreSQL port
 
   go_app:
     build:
