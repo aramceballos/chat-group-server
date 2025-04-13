@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"sync"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/golang-jwt/jwt/v5"
 
 	_ "github.com/lib/pq"
 )
@@ -27,20 +29,18 @@ type Result struct {
 	Message string `json:"message"`
 }
 
-const (
-	dbHost     = "postgres"
-	dbPort     = 5432
-	dbUser     = "postgres"
-	dbPassword = "mysecretpassword"
-	dbName     = "postgres"
-)
-
 // Database instance
 var db *sql.DB
 
-func Connect() error {
+func Connect(
+	dbHost string,
+	dbPort string,
+	dbUser string,
+	dbPassword string,
+	dbName string,
+) error {
 	var err error
-	db, err = sql.Open("postgres", fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPassword, dbName))
+	db, err = sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPassword, dbName))
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,13 @@ type Client struct {
 var channels = make(map[int64]map[*websocket.Conn]*Client)
 
 func main() {
-	if err := Connect(); err != nil {
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbUser := os.Getenv("DB_USER")
+	dbPassword := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_NAME")
+
+	if err := Connect(dbHost, dbPort, dbUser, dbPassword, dbName); err != nil {
 		log.Fatal(err)
 	}
 
@@ -97,6 +103,44 @@ func main() {
 	})
 
 	v1.Get("/chat/:channelId", websocket.New(func(c *websocket.Conn) {
+		token := c.Query("token")
+		if token == "" {
+			errorMessage := Result{
+				Success: false,
+				Message: "Token is required",
+			}
+			err := c.WriteJSON(errorMessage)
+			if err != nil {
+				log.Println("write error:", err)
+				return
+			}
+			return
+		}
+
+		// Parse the token
+		parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+			// Validate the algorithm
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			// Return the secret key
+			return []byte("secret"), nil
+		})
+		if err != nil {
+			errorMessage := Result{
+				Success: false,
+				Message: err.Error(),
+			}
+			err = c.WriteJSON(errorMessage)
+			if err != nil {
+				log.Println("write error:", err)
+				return
+			}
+			return
+		}
+
+		userId := parsedToken.Claims.(jwt.MapClaims)["user_id"].(float64)
+
 		channelId := c.Params("channelId")
 		// Cast channelId to int64
 		channelIdInt, err := strconv.ParseInt(channelId, 10, 64)
@@ -142,7 +186,7 @@ func main() {
 
 			insertedMessage := entities.Message{}
 			// Insert message into database
-			err = db.QueryRow("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, $3) RETURNING id, user_id, channel_id, content, created_at", channelId, 1, string(msg.Content)).Scan(&insertedMessage.ID, &insertedMessage.UserID, &insertedMessage.ChannelID, &insertedMessage.Content, &insertedMessage.CreatedAt)
+			err = db.QueryRow("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, $3) RETURNING id, user_id, channel_id, content, created_at", channelId, userId, string(msg.Content)).Scan(&insertedMessage.ID, &insertedMessage.UserID, &insertedMessage.ChannelID, &insertedMessage.Content, &insertedMessage.CreatedAt)
 			if err != nil {
 				errorMessage := Result{
 					Success: false,
@@ -158,7 +202,7 @@ func main() {
 
 			// Query user from database to populate the message
 			user := entities.User{}
-			err = db.QueryRow("SELECT id, name, avatar_url, created_at FROM users WHERE id = $1", 1).Scan(&user.ID, &user.Name, &user.AvatarURL, &user.CreatedAt)
+			err = db.QueryRow("SELECT id, name, avatar_url, created_at FROM users WHERE id = $1", userId).Scan(&user.ID, &user.Name, &user.AvatarURL, &user.CreatedAt)
 			if err != nil {
 				errorMessage := Result{
 					Success: false,
@@ -186,11 +230,6 @@ func main() {
 
 			// Send message to all clients
 			for conn, cl := range channels[channelIdInt] {
-				// Check if the client is the sender
-				if cl == client {
-					continue
-				}
-
 				go func(conn *websocket.Conn, cl *Client) {
 					cl.mu.Lock()
 					defer cl.mu.Unlock()
