@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -22,7 +23,7 @@ import (
 )
 
 type Message struct {
-	Content string `json:"content"`
+	Body json.RawMessage `json:"body"`
 }
 type Result struct {
 	Success bool   `json:"success"`
@@ -180,14 +181,17 @@ func main() {
 			}
 
 			// Check if message is empty
-			if msg.Content == "" {
+			if len(msg.Body) == 0 {
 				continue
 			}
 
+			fmt.Printf("Received message content: %s\n", string(msg.Body))
+
 			insertedMessage := entities.Message{}
 			// Insert message into database
-			err = db.QueryRow("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, $3) RETURNING id, user_id, channel_id, content, created_at", channelId, userId, string(msg.Content)).Scan(&insertedMessage.ID, &insertedMessage.UserID, &insertedMessage.ChannelID, &insertedMessage.Content, &insertedMessage.CreatedAt)
+			err = db.QueryRow("INSERT INTO messages (channel_id, user_id, body) VALUES ($1, $2, $3::jsonb) RETURNING id, user_id, channel_id, body, created_at", channelId, userId, msg.Body).Scan(&insertedMessage.ID, &insertedMessage.UserID, &insertedMessage.ChannelID, &insertedMessage.Body, &insertedMessage.CreatedAt)
 			if err != nil {
+				fmt.Println("error inserting message:", err)
 				errorMessage := Result{
 					Success: false,
 					Message: err.Error(),

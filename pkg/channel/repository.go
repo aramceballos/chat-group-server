@@ -2,6 +2,7 @@ package channel
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -87,12 +88,13 @@ func (r *repository) FetchChannelById(channelId string) (entities.Channel, error
 	// Iterate through the rows
 	for rows.Next() {
 		var (
-			channelID, messageID                                                                                               int
-			membershipID, membershipUserID                                                                                     sql.NullInt64
-			channelName, channelDescription, channelImageURL                                                                   string
-			messageUserID                                                                                                      int64
-			membershipRole, membershipUserName, membershipUserAvatarURL, messageUserAvatarURL, messageContent, messageUserName string
-			membershipUserCreatedAt, messageUserCreatedAt, messageCreatedAt                                                    string
+			channelID, messageID                                                                               int
+			membershipID, membershipUserID                                                                     sql.NullInt64
+			channelName, channelDescription, channelImageURL                                                   string
+			messageUserID                                                                                      int64
+			membershipRole, membershipUserName, membershipUserAvatarURL, messageUserAvatarURL, messageUserName string
+			membershipUserCreatedAt, messageUserCreatedAt, messageCreatedAt                                    string
+			messageBody                                                                                        json.RawMessage
 		)
 
 		// Scan the values into variables
@@ -100,7 +102,7 @@ func (r *repository) FetchChannelById(channelId string) (entities.Channel, error
 			&channelID, &channelName, &channelDescription, &channelImageURL,
 			&membershipID, &membershipUserID, &membershipRole, &membershipUserName, &membershipUserAvatarURL, &membershipUserCreatedAt,
 			&messageID, &messageUserID, &messageUserName, &messageUserAvatarURL, &messageUserCreatedAt,
-			&messageContent, &messageCreatedAt,
+			&messageBody, &messageCreatedAt,
 		); err != nil {
 			return entities.Channel{}, err
 		}
@@ -141,7 +143,7 @@ func (r *repository) FetchChannelById(channelId string) (entities.Channel, error
 				ID:        messageID,
 				UserID:    messageUserID,
 				ChannelID: channelID,
-				Content:   messageContent,
+				Body:      messageBody, // Use messageBody variable, which should be of type json.RawMessage
 				CreatedAt: messageCreatedAt,
 				User: entities.User{
 					ID:        messageUserID,
