@@ -267,6 +267,17 @@ func main() {
 					}
 					continue
 				}
+			} else {
+				errorMessage := Result{
+					Success: false,
+					Message: "Unsupported message type",
+				}
+				err = c.WriteJSON(errorMessage)
+				if err != nil {
+					log.Printf("write error [error response]: %v", err)
+					break
+				}
+				continue
 			}
 
 			fmt.Printf("Received message from %s content: %s\n", c.RemoteAddr().String(), string(msg.Body))
