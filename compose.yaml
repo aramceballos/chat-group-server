@@ -13,6 +13,7 @@ services:
       DB_USER: postgres
       DB_PASSWORD: mysecretpassword
       DB_NAME: postgres
+      DB_SSL_MODE: require
       JWT_SECRET: secret
     ports:
       - "4000:4000"  # Expose Go app port

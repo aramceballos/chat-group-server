@@ -37,9 +37,10 @@ func Connect(
 	dbUser string,
 	dbPassword string,
 	dbName string,
+	sslMode string,
 ) error {
 	var err error
-	db, err = sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPassword, dbName))
+	db, err = sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", dbHost, dbPort, dbUser, dbPassword, dbName, sslMode))
 	if err != nil {
 		return err
 	}
@@ -62,8 +63,12 @@ func main() {
 	dbUser := os.Getenv("DB_USER")
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := os.Getenv("DB_NAME")
+	sslMode := os.Getenv("DB_SSL_MODE")
+	if sslMode == "" {
+		sslMode = "require" // Default for secure connection
+	}
 
-	if err := Connect(dbHost, dbPort, dbUser, dbPassword, dbName); err != nil {
+	if err := Connect(dbHost, dbPort, dbUser, dbPassword, dbName, sslMode); err != nil {
 		log.Fatal(err)
 	}
 
@@ -133,7 +138,31 @@ func main() {
 			return
 		}
 
-		userId := parsedToken.Claims.(jwt.MapClaims)["user_id"].(float64)
+		claims, ok := parsedToken.Claims.(jwt.MapClaims)
+		if !ok {
+			errorResponse := Result{
+				Success: false,
+				Message: "invalid claims format",
+			}
+			err := c.WriteJSON(errorResponse)
+			if err != nil {
+				log.Printf("write error [error response]: %v", err)
+			}
+			return
+		}
+
+		userId, ok := claims["user_id"].(int64)
+		if !ok {
+			errorResponse := Result{
+				Success: false,
+				Message: "invalid user_id in token",
+			}
+			err := c.WriteJSON(errorResponse)
+			if err != nil {
+				log.Printf("write error [error response]: %v", err)
+			}
+			return
+		}
 
 		channelId := c.Params("channelId")
 		// Cast channelId to int64
