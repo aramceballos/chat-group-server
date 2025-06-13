@@ -10,8 +10,6 @@ import (
 	"sync"
 
 	"github.com/aramceballos/chat-group-server/api/routes"
-	"github.com/aramceballos/chat-group-server/pkg/auth"
-	"github.com/aramceballos/chat-group-server/pkg/channel"
 	"github.com/aramceballos/chat-group-server/pkg/entities"
 	"github.com/aramceballos/chat-group-server/pkg/user"
 	"github.com/gofiber/contrib/websocket"
@@ -74,12 +72,6 @@ func main() {
 	userRepo := user.NewRepository(db)
 	userService := user.NewService(userRepo)
 
-	channelRepo := channel.NewRepository(db)
-	channelService := channel.NewService(channelRepo)
-
-	authRepo := auth.NewRepository(db)
-	authService := auth.NewService(authRepo)
-
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 	}))
@@ -93,8 +85,6 @@ func main() {
 	v1 := api.Group("/v1")
 
 	routes.UserRouter(v1, userService)
-	routes.ChannelRouter(v1, channelService)
-	routes.AuthRouter(v1, authService)
 
 	v1.Use("/chat", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
@@ -124,8 +114,11 @@ func main() {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			// Return the secret key
-			return []byte("secret"), nil
+			secret := os.Getenv("JWT_SECRET")
+			if secret == "" {
+				panic("JWT_SECRET env var must be set")
+			}
+			return []byte(secret), nil
 		})
 		if err != nil {
 			errorMessage := Result{
