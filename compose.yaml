@@ -15,5 +15,6 @@ services:
       DB_NAME: postgres
       DB_SSL_MODE: require
       JWT_SECRET: secret
+      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:4003
     ports:
       - "4000:4000"  # Expose Go app port

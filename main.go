@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/aramceballos/chat-group-server/api/routes"
@@ -78,7 +80,10 @@ func main() {
 	userService := user.NewService(userRepo)
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
+		AllowOriginsFunc: func(origin string) bool {
+			allowedOrigins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
+			return slices.Contains(allowedOrigins, origin)
+		},
 	}))
 
 	app.Get("/", func(c *fiber.Ctx) error {
@@ -151,7 +156,10 @@ func main() {
 			return
 		}
 
-		userId, ok := claims["user_id"].(int64)
+		userId, ok := claims["user_id"].(float64)
+		fmt.Println("Claims: ", claims)
+		fmt.Println("userId: ", claims["user_id"])
+		fmt.Println("parsed userId: ", userId)
 		if !ok {
 			errorResponse := Result{
 				Success: false,
@@ -174,7 +182,7 @@ func main() {
 
 		// Check if user is a member of the channel
 		var exists bool
-		err = db.QueryRow("SELECT EXISTS (SELECT 1 FROM memberships WHERE channel_id = $1 AND user_id = $2)", channelIdInt, userId).Scan(&exists)
+		err = db.QueryRow("SELECT EXISTS (SELECT 1 FROM memberships WHERE channel_id = $1 AND user_id = $2)", channelIdInt, int64(userId)).Scan(&exists)
 		if err != nil || !exists {
 			fmt.Println("error checking membership:", err)
 			errorMessage := Result{
