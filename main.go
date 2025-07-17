@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aramceballos/chat-group-server/api/routes"
 	"github.com/aramceballos/chat-group-server/pkg/entities"
@@ -17,6 +18,7 @@ import (
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/golang-jwt/jwt/v5"
 
 	_ "github.com/lib/pq"
@@ -83,6 +85,19 @@ func main() {
 		AllowOriginsFunc: func(origin string) bool {
 			allowedOrigins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
 			return slices.Contains(allowedOrigins, origin)
+		},
+	}))
+
+	app.Use(limiter.New(limiter.Config{
+		Max:        10,
+		Expiration: 30 * time.Second,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error": "Rate limit exceeded",
+			})
 		},
 	}))
 
