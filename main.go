@@ -55,8 +55,44 @@ func Connect(
 }
 
 type Client struct {
-	isClosing bool
-	mu        sync.Mutex
+	conn *websocket.Conn
+	send chan interface{}
+	quit chan struct{}
+	once sync.Once
+}
+
+func NewClient(conn *websocket.Conn) *Client {
+	return &Client{
+		conn: conn,
+		send: make(chan interface{}, 256),
+		quit: make(chan struct{}),
+	}
+}
+
+func (c *Client) writePump() {
+	defer func() {
+		c.conn.Close()
+	}()
+
+	for {
+		select {
+		case message := <-c.send:
+			if err := c.conn.WriteJSON(message); err != nil {
+				log.Printf("write error [broadcast]: %v", err)
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+		case <-c.quit:
+			c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+			return
+		}
+	}
+}
+
+func (c *Client) close() {
+	c.once.Do(func() {
+		close(c.quit)
+	})
 }
 
 var channels = make(map[int64]map[*websocket.Conn]*Client)
@@ -213,7 +249,7 @@ func main() {
 		}
 
 		// Create a new client
-		client := &Client{}
+		client := NewClient(c)
 
 		// Add client to the channel
 		if _, ok := channels[channelIdInt]; !ok {
@@ -223,9 +259,12 @@ func main() {
 
 		fmt.Printf("Client %s connected to channel %d\n", c.RemoteAddr().String(), channelIdInt)
 
+		go client.writePump()
+
 		// Remove client from the channel
 		defer func() {
 			fmt.Printf("Client %s disconnected from channel %d\n", c.RemoteAddr().String(), channelIdInt)
+			client.close()
 			delete(channels[channelIdInt], c)
 		}()
 
@@ -233,14 +272,9 @@ func main() {
 			msg := Message{}
 			err := c.ReadJSON(&msg.Body)
 			if err != nil {
-				errorMessage := Result{
+				client.send <- Result{
 					Success: false,
 					Message: err.Error(),
-				}
-				err = c.WriteJSON(errorMessage)
-				if err != nil {
-					log.Printf("write error [error response]: %v", err)
-					break
 				}
 				continue
 			}
@@ -253,28 +287,18 @@ func main() {
 			// Validate message body JSON structure
 			var body map[string]interface{}
 			if err := json.Unmarshal(msg.Body, &body); err != nil {
-				errorMessage := Result{
+				client.send <- Result{
 					Success: false,
 					Message: "Invalid message body JSON",
-				}
-				err = c.WriteJSON(errorMessage)
-				if err != nil {
-					log.Printf("write error [error response]: %v", err)
-					break
 				}
 				continue
 			}
 
 			msgType, ok := body["type"].(string)
 			if !ok {
-				errorMessage := Result{
+				client.send <- Result{
 					Success: false,
 					Message: "Message body must have a 'type' field",
-				}
-				err = c.WriteJSON(errorMessage)
-				if err != nil {
-					log.Printf("write error [error response]: %v", err)
-					break
 				}
 				continue
 			}
@@ -282,14 +306,9 @@ func main() {
 			if msgType == "text" {
 				content, ok := body["content"].(string)
 				if !ok || len(content) == 0 {
-					errorMessage := Result{
+					client.send <- Result{
 						Success: false,
 						Message: "Text messages must have a non-empty 'content' field",
-					}
-					err = c.WriteJSON(errorMessage)
-					if err != nil {
-						log.Printf("write error [error response]: %v", err)
-						break
 					}
 					continue
 				}
@@ -301,26 +320,16 @@ func main() {
 				url, urlOk := body["url"].(string)
 				_, sizeOk := body["size_in_bytes"]
 				if !fileIDOk || fileID == "" || !filenameOk || filename == "" || !mimeTypeOk || mimeType == "" || !urlOk || url == "" || !sizeOk {
-					errorMessage := Result{
+					client.send <- Result{
 						Success: false,
 						Message: "File messages must have non-empty 'file_id', 'filename', 'mime_type', 'url', and 'size_in_bytes' fields",
-					}
-					err = c.WriteJSON(errorMessage)
-					if err != nil {
-						log.Printf("write error [error response]: %v", err)
-						break
 					}
 					continue
 				}
 			} else {
-				errorMessage := Result{
+				client.send <- Result{
 					Success: false,
 					Message: "Unsupported message type",
-				}
-				err = c.WriteJSON(errorMessage)
-				if err != nil {
-					log.Printf("write error [error response]: %v", err)
-					break
 				}
 				continue
 			}
@@ -332,13 +341,9 @@ func main() {
 			err = db.QueryRow("INSERT INTO messages (channel_id, user_id, body) VALUES ($1, $2, $3::jsonb) RETURNING id, user_id, channel_id, body, created_at", channelId, userId, msg.Body).Scan(&insertedMessage.ID, &insertedMessage.UserID, &insertedMessage.ChannelID, &insertedMessage.Body, &insertedMessage.CreatedAt)
 			if err != nil {
 				fmt.Println("error inserting message:", err)
-				err = c.WriteJSON(Result{
+				client.send <- Result{
 					Success: false,
 					Message: err.Error(),
-				})
-				if err != nil {
-					log.Printf("write error [error response]: %v", err)
-					break
 				}
 				continue
 			}
@@ -347,47 +352,25 @@ func main() {
 			user := entities.User{}
 			err = db.QueryRow("SELECT id, name, avatar_url, created_at FROM users WHERE id = $1", userId).Scan(&user.ID, &user.Name, &user.AvatarURL, &user.CreatedAt)
 			if err != nil {
-				err = c.WriteJSON(Result{
+				client.send <- Result{
 					Success: false,
 					Message: err.Error(),
-				})
-				if err != nil {
-					log.Printf("write error [error response]: %v", err)
-					break
 				}
 				continue
 			}
 			insertedMessage.User = user
 			fmt.Println("Broadcasting message", string(insertedMessage.Body))
 
-			res := Result{
+			client.send <- Result{
 				Success: true,
 				Message: "Message sent successfully",
-			}
-			err = c.WriteJSON(res)
-			if err != nil {
-				log.Printf("write error [success response]: %v", err)
-				break
 			}
 
 			// Send message to all clients
 			for conn, cl := range channels[channelIdInt] {
 				go func(conn *websocket.Conn, cl *Client) {
-					cl.mu.Lock()
-					defer cl.mu.Unlock()
-					if cl.isClosing {
-						return
-					}
-
 					fmt.Printf("Sending message to %s content: %s\n", conn.RemoteAddr().String(), string(msg.Body))
-					err = conn.WriteJSON(insertedMessage)
-					if err != nil {
-						cl.isClosing = true
-						log.Printf("write error [broadcast]: %v", err)
-
-						conn.WriteMessage(websocket.CloseMessage, []byte{})
-						conn.Close()
-					}
+					cl.send <- insertedMessage
 				}(conn, cl)
 			}
 
