@@ -99,7 +99,7 @@ func main() {
 		return c.SendStatus(fiber.StatusUpgradeRequired)
 	})
 
-	v1.Get("/chat/:channelId", handlers.Chat(db))
+	v1.Get("/chat/:channelId", handlers.ChatHandler(db))
 
 	app.Listen(":4000")
 }

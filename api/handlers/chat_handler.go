@@ -67,7 +67,7 @@ func (c *Client) close() {
 
 var channels = make(map[int64]map[*websocket.Conn]*Client)
 
-func Chat(db *sql.DB) fiber.Handler {
+func ChatHandler(db *sql.DB) fiber.Handler {
 	return websocket.New(func(c *websocket.Conn) {
 		token := c.Query("token")
 		if token == "" {
