@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -37,6 +38,65 @@ func NewClient(conn *websocket.Conn) *Client {
 		send: make(chan interface{}, 256),
 		quit: make(chan struct{}),
 	}
+}
+
+func validateMessageBody(body map[string]interface{}) error {
+	msgType, ok := body["type"].(string)
+	if !ok {
+		return errors.New("Message body must have a 'type' field")
+	}
+
+	switch msgType {
+	case "text":
+		content, ok := body["content"].(string)
+		if !ok || len(content) == 0 {
+			return errors.New("text messages must have a non-empty 'content' field")
+		}
+	case "file":
+		// Validate file fields
+		fileID, fileIDOk := body["file_id"].(string)
+		filename, filenameOk := body["filename"].(string)
+		mimeType, mimeTypeOk := body["mime_type"].(string)
+		url, urlOk := body["url"].(string)
+		_, sizeOk := body["size_in_bytes"]
+		if !fileIDOk || fileID == "" || !filenameOk || filename == "" || !mimeTypeOk || mimeType == "" || !urlOk || url == "" || !sizeOk {
+			return errors.New("file messages must have non-empty 'file_id', 'filename', 'mime_type', 'url', and 'size_in_bytes' fields")
+		}
+	default:
+		return errors.New("unsupported message type")
+	}
+
+	return nil
+}
+
+func validateToken(token string) (int, error) {
+	// Parse the token
+	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		// Validate the algorithm
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		secret := os.Getenv("JWT_SECRET")
+		if secret == "" {
+			panic("JWT_SECRET env var must be set")
+		}
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, errors.New("invalid claims format")
+	}
+
+	userId, ok := claims["user_id"].(float64)
+	if !ok {
+		return 0, errors.New("invalid user_id in token")
+	}
+
+	return int(userId), nil
 }
 
 func (c *Client) writePump() {
@@ -83,56 +143,16 @@ func ChatHandler(db *sql.DB) fiber.Handler {
 			return
 		}
 
-		// Parse the token
-		parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
-			// Validate the algorithm
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			secret := os.Getenv("JWT_SECRET")
-			if secret == "" {
-				panic("JWT_SECRET env var must be set")
-			}
-			return []byte(secret), nil
-		})
+		userId, err := validateToken(token)
 		if err != nil {
 			errorMessage := Result{
 				Success: false,
-				Message: err.Error(),
+				Message: "Token is required",
 			}
-			err = c.WriteJSON(errorMessage)
+			err := c.WriteJSON(errorMessage)
 			if err != nil {
 				log.Printf("write error [error response]: %v", err)
 				return
-			}
-			return
-		}
-
-		claims, ok := parsedToken.Claims.(jwt.MapClaims)
-		if !ok {
-			errorResponse := Result{
-				Success: false,
-				Message: "invalid claims format",
-			}
-			err := c.WriteJSON(errorResponse)
-			if err != nil {
-				log.Printf("write error [error response]: %v", err)
-			}
-			return
-		}
-
-		userId, ok := claims["user_id"].(float64)
-		fmt.Println("Claims: ", claims)
-		fmt.Println("userId: ", claims["user_id"])
-		fmt.Println("parsed userId: ", userId)
-		if !ok {
-			errorResponse := Result{
-				Success: false,
-				Message: "invalid user_id in token",
-			}
-			err := c.WriteJSON(errorResponse)
-			if err != nil {
-				log.Printf("write error [error response]: %v", err)
 			}
 			return
 		}
@@ -147,7 +167,7 @@ func ChatHandler(db *sql.DB) fiber.Handler {
 
 		// Check if user is a member of the channel
 		var exists bool
-		err = db.QueryRow("SELECT EXISTS (SELECT 1 FROM memberships WHERE channel_id = $1 AND user_id = $2)", channelIdInt, int64(userId)).Scan(&exists)
+		err = db.QueryRow("SELECT EXISTS (SELECT 1 FROM memberships WHERE channel_id = $1 AND user_id = $2)", channelIdInt, userId).Scan(&exists)
 		if err != nil || !exists {
 			fmt.Println("error checking membership:", err)
 			errorMessage := Result{
@@ -208,42 +228,10 @@ func ChatHandler(db *sql.DB) fiber.Handler {
 				continue
 			}
 
-			msgType, ok := body["type"].(string)
-			if !ok {
+			if err = validateMessageBody(body); err != nil {
 				client.send <- Result{
 					Success: false,
-					Message: "Message body must have a 'type' field",
-				}
-				continue
-			}
-
-			if msgType == "text" {
-				content, ok := body["content"].(string)
-				if !ok || len(content) == 0 {
-					client.send <- Result{
-						Success: false,
-						Message: "Text messages must have a non-empty 'content' field",
-					}
-					continue
-				}
-			} else if msgType == "file" {
-				// Validate file fields
-				fileID, fileIDOk := body["file_id"].(string)
-				filename, filenameOk := body["filename"].(string)
-				mimeType, mimeTypeOk := body["mime_type"].(string)
-				url, urlOk := body["url"].(string)
-				_, sizeOk := body["size_in_bytes"]
-				if !fileIDOk || fileID == "" || !filenameOk || filename == "" || !mimeTypeOk || mimeType == "" || !urlOk || url == "" || !sizeOk {
-					client.send <- Result{
-						Success: false,
-						Message: "File messages must have non-empty 'file_id', 'filename', 'mime_type', 'url', and 'size_in_bytes' fields",
-					}
-					continue
-				}
-			} else {
-				client.send <- Result{
-					Success: false,
-					Message: "Unsupported message type",
+					Message: err.Error(),
 				}
 				continue
 			}
