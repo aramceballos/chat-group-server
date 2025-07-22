@@ -30,6 +30,10 @@ func NewMockRepositoryWithError(errorMsg string) *MockRepository {
 	}
 }
 
+func (repo *MockRepository) Close() error {
+	return nil
+}
+
 func (repo *MockRepository) FetchUsers() ([]entities.User, error) {
 	if repo.shouldError {
 		return nil, errors.New(repo.errorMsg)

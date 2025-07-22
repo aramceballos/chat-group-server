@@ -64,6 +64,7 @@ func main() {
 	app := fiber.New()
 
 	userRepo := user.NewRepository(db)
+	defer userRepo.Close()
 	userService := user.NewService(userRepo)
 
 	app.Use(cors.New(cors.Config{

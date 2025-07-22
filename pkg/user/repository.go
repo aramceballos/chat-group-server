@@ -12,6 +12,7 @@ type Repository interface {
 	FetchUsers() ([]entities.User, error)
 	FetchUserById(id string) (entities.User, error)
 	UpdateUser(userId string, user entities.UpdateUserInput) error
+	Close() error
 }
 
 type repository struct {
@@ -39,53 +40,64 @@ func NewRepository(db *sql.DB) Repository {
 }
 
 func (r *repository) prepareStatements() error {
-	var err error
-	r.fetchUsersStmt, err = r.db.Prepare(`
-		SELECT 
-			id, name, avatar_url, created_at
-		FROM users
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare fetch users statement: %w", err)
+	statements := []struct {
+		stmt  **sql.Stmt
+		query string
+		name  string
+	}{
+		{
+			stmt:  &r.fetchUsersStmt,
+			query: "SELECT id, name, avatar_url, created_at FROM users",
+			name:  "fetch users",
+		},
+		{
+			stmt:  &r.fetchUserByIdStmt,
+			query: "SELECT id, name, username, email, avatar_url, created_at FROM users WHERE id = $1",
+			name:  "fetch user by id",
+		},
+		{
+			stmt:  &r.checkEmailStmt,
+			query: "SELECT id FROM users WHERE email = $1 AND id != $2",
+			name:  "check user existance by email",
+		},
+		{
+			stmt:  &r.checkUsernameStmt,
+			query: "SELECT id FROM users WHERE username = $1 AND id != $2",
+			name:  "check user existance by email",
+		},
+		{
+			stmt:  &r.updateUserStmt,
+			query: "UPDATE users SET name = $1, username = $2, email = $3 WHERE id = $4",
+			name:  "update user information",
+		},
 	}
-	r.fetchUserByIdStmt, err = r.db.Prepare(`
-		SELECT 
-			id, name, username, email, avatar_url, created_at 
-		FROM users 
-		WHERE 
-			id = $1
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare fetch users statement: %w", err)
+
+	for _, s := range statements {
+		stmt, err := r.db.Prepare(s.query)
+		if err != nil {
+			return fmt.Errorf("faile to prepare %s statement: %w", s.name, err)
+		}
+		*s.stmt = stmt
 	}
-	r.checkEmailStmt, err = r.db.Prepare(`
-		SELECT id 
-		FROM users 
-		WHERE 
-			email = $1 
-			AND 
-			id != $2
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare fetch users statement: %w", err)
+
+	return nil
+}
+
+func (r *repository) Close() error {
+	statements := []*sql.Stmt{
+		r.fetchUserByIdStmt,
+		r.fetchUserByIdStmt,
+		r.checkEmailStmt,
+		r.checkUsernameStmt,
+		r.updateUserStmt,
 	}
-	r.checkUsernameStmt, err = r.db.Prepare(`
-		SELECT id 
-		FROM users 
-		WHERE 
-			username = $1 AND id != $2
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to repare fetch users statement: %w", err)
-	}
-	r.updateUserStmt, err = r.db.Prepare(`
-		UPDATE users 
-		SET 
-			name = $1, username = $2, email = $3
-		WHERE id = $4
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to repare fetch users statement: %w", err)
+
+	for _, stmt := range statements {
+		if stmt != nil {
+			if err := stmt.Close(); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
