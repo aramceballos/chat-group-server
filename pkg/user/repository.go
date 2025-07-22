@@ -112,7 +112,7 @@ func (r *repository) FetchUserById(id string) (entities.User, error) {
 	var user entities.User
 	var username sql.NullString
 	var email sql.NullString
-	err := r.db.QueryRow("", id).Scan(&user.ID, &user.Name, &username, &email, &user.AvatarURL, &user.CreatedAt)
+	err := r.fetchUserByIdStmt.QueryRow(id).Scan(&user.ID, &user.Name, &username, &email, &user.AvatarURL, &user.CreatedAt)
 	if err != nil {
 		return entities.User{}, err
 	}
@@ -129,7 +129,7 @@ func (r *repository) FetchUserById(id string) (entities.User, error) {
 
 func (r *repository) UpdateUser(userId string, user entities.UpdateUserInput) error {
 	var existingUser entities.User
-	err := r.db.QueryRow("SELECT id FROM users WHERE email = $1 AND id != $2", user.Email, userId).Scan(&existingUser.ID)
+	err := r.checkEmailStmt.QueryRow(user.Email, userId).Scan(&existingUser.ID)
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
@@ -137,7 +137,7 @@ func (r *repository) UpdateUser(userId string, user entities.UpdateUserInput) er
 		return errors.New("a user with this email already exists")
 	}
 
-	err = r.db.QueryRow("SELECT id FROM users WHERE username = $1 AND id != $2", user.Username, userId).Scan(&existingUser.ID)
+	err = r.checkUsernameStmt.QueryRow(user.Username, userId).Scan(&existingUser.ID)
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
@@ -145,7 +145,7 @@ func (r *repository) UpdateUser(userId string, user entities.UpdateUserInput) er
 		return errors.New("a user with this username already exists")
 	}
 
-	_, err = r.db.Exec("UPDATE users SET name = $1, username = $2, email = $3 WHERE id = $4", user.Name, user.Username, user.Email, userId)
+	_, err = r.updateUserStmt.Exec(user.Name, user.Username, user.Email, userId)
 	if err != nil {
 		return err
 	}
