@@ -32,7 +32,9 @@ func NewRepository(db *sql.DB) Repository {
 		checkUsernameStmt: nil,
 		updateUserStmt:    nil,
 	}
-	repo.prepareStatements()
+	if err := repo.prepareStatements(); err != nil {
+		panic(err.Error())
+	}
 	return repo
 }
 
@@ -44,7 +46,7 @@ func (r *repository) prepareStatements() error {
 		FROM users
 	`)
 	if err != nil {
-		return fmt.Errorf("failed to repare fetch users statement: %w", err)
+		return fmt.Errorf("failed to prepare fetch users statement: %w", err)
 	}
 	r.fetchUserByIdStmt, err = r.db.Prepare(`
 		SELECT 
@@ -54,7 +56,7 @@ func (r *repository) prepareStatements() error {
 			id = $1
 	`)
 	if err != nil {
-		return fmt.Errorf("failed to repare fetch users statement: %w", err)
+		return fmt.Errorf("failed to prepare fetch users statement: %w", err)
 	}
 	r.checkEmailStmt, err = r.db.Prepare(`
 		SELECT id 
@@ -65,7 +67,7 @@ func (r *repository) prepareStatements() error {
 			id != $2
 	`)
 	if err != nil {
-		return fmt.Errorf("failed to repare fetch users statement: %w", err)
+		return fmt.Errorf("failed to prepare fetch users statement: %w", err)
 	}
 	r.checkUsernameStmt, err = r.db.Prepare(`
 		SELECT id 
