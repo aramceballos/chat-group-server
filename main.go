@@ -39,6 +39,10 @@ func Connect(
 	if err = db.Ping(); err != nil {
 		return err
 	}
+	db.SetMaxOpenConns(200)
+	db.SetMaxIdleConns(50)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(30 * time.Second)
 	return nil
 }
 
