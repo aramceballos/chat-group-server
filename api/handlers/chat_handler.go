@@ -125,7 +125,10 @@ func (c *Client) close() {
 	})
 }
 
-var channels = make(map[int64]map[*websocket.Conn]*Client)
+var (
+	channels   = make(map[int64]map[*websocket.Conn]*Client)
+	channelsMu sync.RWMutex
+)
 
 func ChatHandler(db *sql.DB) fiber.Handler {
 	return websocket.New(func(c *websocket.Conn) {
@@ -186,10 +189,12 @@ func ChatHandler(db *sql.DB) fiber.Handler {
 		client := NewClient(c)
 
 		// Add client to the channel
+		channelsMu.Lock()
 		if _, ok := channels[channelIdInt]; !ok {
 			channels[channelIdInt] = make(map[*websocket.Conn]*Client)
 		}
 		channels[channelIdInt][c] = client
+		channelsMu.Unlock()
 
 		fmt.Printf("Client %s connected to channel %d\n", c.RemoteAddr().String(), channelIdInt)
 
@@ -199,7 +204,14 @@ func ChatHandler(db *sql.DB) fiber.Handler {
 		defer func() {
 			fmt.Printf("Client %s disconnected from channel %d\n", c.RemoteAddr().String(), channelIdInt)
 			client.close()
+
+			channelsMu.Lock()
 			delete(channels[channelIdInt], c)
+			if len(channels[channelIdInt]) == 0 {
+				delete(channels, channelIdInt)
+				fmt.Printf("Channel %d cleaned up (empty)\n", channelIdInt)
+			}
+			channelsMu.Unlock()
 		}()
 
 		for {
