@@ -10,21 +10,32 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewRepository(t *testing.T) {
-	db, _, err := sqlmock.New()
+func setupMockRepository(t *testing.T) (*sql.DB, sqlmock.Sqlmock, Repository) {
+	db, mock, err := sqlmock.New()
 	assert.NoError(t, err)
-	defer db.Close()
+
+	mock.ExpectPrepare("SELECT id, name, avatar_url, created_at FROM users;")
+	mock.ExpectPrepare("SELECT id, name, username, email, avatar_url, created_at FROM users WHERE id = \\$1;")
+	mock.ExpectPrepare("SELECT id FROM users WHERE email = \\$1 AND id != \\$2;")
+	mock.ExpectPrepare("SELECT id FROM users WHERE username = \\$1 AND id != \\$2;")
+	mock.ExpectPrepare("UPDATE users SET name = \\$1, username = \\$2, email = \\$3 WHERE id = \\$4;")
 
 	repo := NewRepository(db)
 	assert.NotNil(t, repo)
+	return db, mock, repo
+}
+
+func TestNewRepository(t *testing.T) {
+	db, mock, repo := setupMockRepository(t)
+	defer db.Close()
+
+	assert.NotNil(t, repo)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestFetchUsers(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	assert.NoError(t, err)
+	db, mock, repo := setupMockRepository(t)
 	defer db.Close()
-
-	repo := NewRepository(db)
 
 	t.Run("success", func(t *testing.T) {
 		rows := sqlmock.NewRows([]string{"id", "name", "avatar_url", "created_at"}).
@@ -61,11 +72,8 @@ func TestFetchUsers(t *testing.T) {
 }
 
 func TestFetchUserById(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	assert.NoError(t, err)
+	db, mock, repo := setupMockRepository(t)
 	defer db.Close()
-
-	repo := NewRepository(db)
 
 	t.Run("success with username and email", func(t *testing.T) {
 		row := sqlmock.NewRows([]string{"id", "name", "username", "email", "avatar_url", "created_at"}).
@@ -117,11 +125,8 @@ func TestFetchUserById(t *testing.T) {
 }
 
 func TestUpdateUser(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	assert.NoError(t, err)
+	db, mock, repo := setupMockRepository(t)
 	defer db.Close()
-
-	repo := NewRepository(db)
 
 	t.Run("success", func(t *testing.T) {
 		updateInput := entities.UpdateUserInput{

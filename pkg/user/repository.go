@@ -26,12 +26,7 @@ type repository struct {
 
 func NewRepository(db *sql.DB) Repository {
 	repo := &repository{
-		db:                db,
-		fetchUsersStmt:    nil,
-		fetchUserByIdStmt: nil,
-		checkEmailStmt:    nil,
-		checkUsernameStmt: nil,
-		updateUserStmt:    nil,
+		db: db,
 	}
 	if err := repo.prepareStatements(); err != nil {
 		panic(err.Error())
@@ -47,27 +42,27 @@ func (r *repository) prepareStatements() error {
 	}{
 		{
 			stmt:  &r.fetchUsersStmt,
-			query: "SELECT id, name, avatar_url, created_at FROM users",
+			query: "SELECT id, name, avatar_url, created_at FROM users;",
 			name:  "fetch users",
 		},
 		{
 			stmt:  &r.fetchUserByIdStmt,
-			query: "SELECT id, name, username, email, avatar_url, created_at FROM users WHERE id = $1",
+			query: "SELECT id, name, username, email, avatar_url, created_at FROM users WHERE id = $1;",
 			name:  "fetch user by id",
 		},
 		{
 			stmt:  &r.checkEmailStmt,
-			query: "SELECT id FROM users WHERE email = $1 AND id != $2",
+			query: "SELECT id FROM users WHERE email = $1 AND id != $2;",
 			name:  "check user existance by email",
 		},
 		{
 			stmt:  &r.checkUsernameStmt,
-			query: "SELECT id FROM users WHERE username = $1 AND id != $2",
+			query: "SELECT id FROM users WHERE username = $1 AND id != $2;",
 			name:  "check user existance by email",
 		},
 		{
 			stmt:  &r.updateUserStmt,
-			query: "UPDATE users SET name = $1, username = $2, email = $3 WHERE id = $4",
+			query: "UPDATE users SET name = $1, username = $2, email = $3 WHERE id = $4;",
 			name:  "update user information",
 		},
 	}
@@ -85,7 +80,7 @@ func (r *repository) prepareStatements() error {
 
 func (r *repository) Close() error {
 	statements := []*sql.Stmt{
-		r.fetchUserByIdStmt,
+		r.fetchUsersStmt,
 		r.fetchUserByIdStmt,
 		r.checkEmailStmt,
 		r.checkUsernameStmt,
