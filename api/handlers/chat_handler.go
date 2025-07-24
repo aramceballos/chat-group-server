@@ -16,6 +16,8 @@ import (
 	"github.com/golang-jwt/jwt"
 )
 
+const MaxMessageLength = 10 * 1024 // 10KB max raw message length
+
 type Result struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
@@ -227,6 +229,15 @@ func ChatHandler(db *sql.DB) fiber.Handler {
 
 			// Check if message is empty
 			if len(msg.Body) == 0 {
+				continue
+			}
+
+			// Validate message does not exceed max length
+			if len(msg.Body) > MaxMessageLength {
+				client.send <- Result{
+					Success: false,
+					Message: "Message size exceeds limit",
+				}
 				continue
 			}
 
