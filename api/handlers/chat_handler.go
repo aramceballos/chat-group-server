@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +9,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/aramceballos/chat-group-server/pkg/entities"
+	"github.com/aramceballos/chat-group-server/pkg/chat"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt"
@@ -132,7 +131,7 @@ var (
 	channelsMu sync.RWMutex
 )
 
-func ChatHandler(db *sql.DB) fiber.Handler {
+func ChatHandler(service chat.Service) fiber.Handler {
 	return websocket.New(func(c *websocket.Conn) {
 		token := c.Query("token")
 		if token == "" {
@@ -171,8 +170,7 @@ func ChatHandler(db *sql.DB) fiber.Handler {
 		}
 
 		// Check if user is a member of the channel
-		var exists bool
-		err = db.QueryRow("SELECT EXISTS (SELECT 1 FROM memberships WHERE channel_id = $1 AND user_id = $2)", channelIdInt, userId).Scan(&exists)
+		exists, err := service.CheckUserMembership(int(channelIdInt), userId)
 		if err != nil || !exists {
 			fmt.Println("error checking membership:", err)
 			errorMessage := Result{
@@ -261,9 +259,9 @@ func ChatHandler(db *sql.DB) fiber.Handler {
 
 			fmt.Printf("Received message from %s content: %s\n", c.RemoteAddr().String(), string(msg.Body))
 
-			insertedMessage := entities.Message{}
 			// Insert message into database
-			err = db.QueryRow("INSERT INTO messages (channel_id, user_id, body) VALUES ($1, $2, $3::jsonb) RETURNING id, user_id, channel_id, body, created_at", channelId, userId, msg.Body).Scan(&insertedMessage.ID, &insertedMessage.UserID, &insertedMessage.ChannelID, &insertedMessage.Body, &insertedMessage.CreatedAt)
+
+			insertedMessage, err := service.InsertMessage(int(channelIdInt), userId, msg.Body)
 			if err != nil {
 				fmt.Println("error inserting message:", err)
 				client.send <- Result{
@@ -274,8 +272,7 @@ func ChatHandler(db *sql.DB) fiber.Handler {
 			}
 
 			// Query user from database to populate the message
-			user := entities.User{}
-			err = db.QueryRow("SELECT id, name, avatar_url, created_at FROM users WHERE id = $1", userId).Scan(&user.ID, &user.Name, &user.AvatarURL, &user.CreatedAt)
+			user, err := service.FetchUserById(userId)
 			if err != nil {
 				client.send <- Result{
 					Success: false,
