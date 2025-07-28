@@ -24,7 +24,6 @@ func NewService(repo Repository) Service {
 }
 
 func (s *service) CheckUserMembership(channelId int, userId int) (bool, error) {
-	// err = s.repo.QueryRow("SELECT EXISTS (SELECT 1 FROM memberships WHERE channel_id = $1 AND user_id = $2)", channelIdInt, userId).Scan(&exists)
 	exists, err := s.repo.CheckUserMembership(channelId, userId)
 	if err != nil {
 		log.Printf("[chat service error] error checking user membership: %s", err.Error())
