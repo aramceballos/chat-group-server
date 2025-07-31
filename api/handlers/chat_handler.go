@@ -218,6 +218,21 @@ func ChatHandler(service chat.Service) fiber.Handler {
 			msg := Message{}
 			err := c.ReadJSON(&msg.Body)
 			if err != nil {
+				if websocket.IsCloseError(err,
+					websocket.CloseNormalClosure,
+					websocket.CloseGoingAway,
+					websocket.CloseNoStatusReceived) {
+					log.Printf("Client disconnected normally: %v", err)
+					break
+				}
+				if websocket.IsUnexpectedCloseError(err,
+					websocket.CloseNormalClosure,
+					websocket.CloseGoingAway,
+					websocket.CloseNoStatusReceived,
+				) {
+					log.Printf("Unexpected close error: %v", err)
+					break
+				}
 				client.send <- Result{
 					Success: false,
 					Message: err.Error(),
@@ -289,13 +304,19 @@ func ChatHandler(service chat.Service) fiber.Handler {
 			}
 
 			// Send message to all clients
-			for conn, cl := range channels[channelIdInt] {
-				go func(conn *websocket.Conn, cl *Client) {
-					fmt.Printf("Sending message to %s content: %s\n", conn.RemoteAddr().String(), string(msg.Body))
-					cl.send <- insertedMessage
-				}(conn, cl)
+			channelsMu.RLock()
+			clients := make([]*Client, 0, len(channels[channelIdInt]))
+			for _, cl := range channels[channelIdInt] {
+				clients = append(clients, cl)
 			}
+			channelsMu.RUnlock()
 
+			for _, client := range clients {
+				select {
+				case client.send <- insertedMessage:
+				default:
+				}
+			}
 		}
 	})
 }
