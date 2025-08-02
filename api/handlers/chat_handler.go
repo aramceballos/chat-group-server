@@ -172,7 +172,7 @@ func ChatHandler(service chat.Service) fiber.Handler {
 		// Check if user is a member of the channel
 		exists, err := service.CheckUserMembership(int(channelIdInt), userId)
 		if err != nil || !exists {
-			fmt.Println("error checking membership:", err)
+			log.Println("error checking membership:", err)
 			errorMessage := Result{
 				Success: false,
 				Message: "You are not a member of this channel",
@@ -196,20 +196,20 @@ func ChatHandler(service chat.Service) fiber.Handler {
 		channels[channelIdInt][c] = client
 		channelsMu.Unlock()
 
-		fmt.Printf("Client %s connected to channel %d\n", c.RemoteAddr().String(), channelIdInt)
+		log.Printf("Client %s with userId: %d connected to channel %d\n", c.RemoteAddr().String(), userId, channelIdInt)
 
 		go client.writePump()
 
 		// Remove client from the channel
 		defer func() {
-			fmt.Printf("Client %s disconnected from channel %d\n", c.RemoteAddr().String(), channelIdInt)
+			log.Printf("Client %s with userId: %d disconnected from channel %d\n", c.RemoteAddr().String(), userId, channelIdInt)
 			client.close()
 
 			channelsMu.Lock()
 			delete(channels[channelIdInt], c)
 			if len(channels[channelIdInt]) == 0 {
 				delete(channels, channelIdInt)
-				fmt.Printf("Channel %d cleaned up (empty)\n", channelIdInt)
+				log.Printf("Channel %d cleaned up (empty)\n", channelIdInt)
 			}
 			channelsMu.Unlock()
 		}()
@@ -272,13 +272,13 @@ func ChatHandler(service chat.Service) fiber.Handler {
 				continue
 			}
 
-			fmt.Printf("Received message from %s content: %s\n", c.RemoteAddr().String(), string(msg.Body))
+			log.Printf("Received message from %s content: %s\n", c.RemoteAddr().String(), string(msg.Body))
 
 			// Insert message into database
 
 			insertedMessage, err := service.InsertMessage(int(channelIdInt), userId, msg.Body)
 			if err != nil {
-				fmt.Println("error inserting message:", err)
+				log.Println("error inserting message:", err)
 				client.send <- Result{
 					Success: false,
 					Message: err.Error(),
@@ -296,7 +296,7 @@ func ChatHandler(service chat.Service) fiber.Handler {
 				continue
 			}
 			insertedMessage.User = user
-			fmt.Println("Broadcasting message", string(insertedMessage.Body))
+			log.Println("Broadcasting message", string(insertedMessage.Body))
 
 			client.send <- Result{
 				Success: true,
