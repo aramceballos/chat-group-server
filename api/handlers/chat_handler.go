@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/aramceballos/chat-group-server/pkg/chat"
 	"github.com/gofiber/contrib/websocket"
@@ -27,17 +28,25 @@ type Message struct {
 }
 
 type Client struct {
-	conn *websocket.Conn
-	send chan interface{}
-	quit chan struct{}
-	once sync.Once
+	conn         *websocket.Conn
+	send         chan interface{}
+	quit         chan struct{}
+	once         sync.Once
+	userId       int
+	channelId    int
+	failureCount int
+	lastFailure  time.Time
 }
 
-func NewClient(conn *websocket.Conn) *Client {
+func NewClient(conn *websocket.Conn, userId int, channelId int) *Client {
 	return &Client{
-		conn: conn,
-		send: make(chan interface{}, 256),
-		quit: make(chan struct{}),
+		conn:         conn,
+		send:         make(chan interface{}, 256),
+		quit:         make(chan struct{}),
+		userId:       userId,
+		channelId:    channelId,
+		failureCount: 0,
+		lastFailure:  time.Now(),
 	}
 }
 
@@ -151,7 +160,7 @@ func ChatHandler(service chat.Service) fiber.Handler {
 		if err != nil {
 			errorMessage := Result{
 				Success: false,
-				Message: "Token is required",
+				Message: err.Error(),
 			}
 			err := c.WriteJSON(errorMessage)
 			if err != nil {
@@ -186,7 +195,7 @@ func ChatHandler(service chat.Service) fiber.Handler {
 		}
 
 		// Create a new client
-		client := NewClient(c)
+		client := NewClient(c, userId, int(channelIdInt))
 
 		// Add client to the channel
 		channelsMu.Lock()
@@ -314,7 +323,30 @@ func ChatHandler(service chat.Service) fiber.Handler {
 			for _, client := range clients {
 				select {
 				case client.send <- insertedMessage:
+					client.failureCount = 0
 				default:
+					client.failureCount++
+					client.lastFailure = time.Now()
+
+					log.Printf("Message dropped (buffer full): client_user=%d, sender_user=%d, channel=%d, failures=%d", client.userId, userId, client.channelId, client.failureCount)
+
+					if client.failureCount >= 5 {
+						log.Printf("Removing unresponsive client: user=%d, channel=%d", client.userId, client.channelId)
+						channelsMu.Lock()
+						for conn, c := range channels[channelIdInt] {
+							if c == client {
+								delete(channels[channelIdInt], conn)
+								c.close()
+								log.Printf("Removed unresponsive client: user=%d, channel=%d", client.userId, client.channelId)
+								break
+							}
+						}
+						if len(channels[channelIdInt]) == 0 {
+							delete(channels, channelIdInt)
+							log.Printf("Channel %d cleaned up (empty)", channelIdInt)
+						}
+						channelsMu.Unlock()
+					}
 				}
 			}
 		}
