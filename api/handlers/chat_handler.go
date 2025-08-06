@@ -205,13 +205,13 @@ func ChatHandler(service chat.Service) fiber.Handler {
 		channels[channelIdInt][c] = client
 		channelsMu.Unlock()
 
-		log.Printf("Client %s with userId: %d connected to channel %d\n", c.RemoteAddr().String(), userId, channelIdInt)
+		log.Printf("User %d joined channel %d from IP %s\n", userId, channelIdInt, c.RemoteAddr().String())
 
 		go client.writePump()
 
 		// Remove client from the channel
 		defer func() {
-			log.Printf("Client %s with userId: %d disconnected from channel %d\n", c.RemoteAddr().String(), userId, channelIdInt)
+			log.Printf("User %d left channel %d from IP %s\n", userId, channelIdInt, c.RemoteAddr().String())
 			client.close()
 
 			channelsMu.Lock()
@@ -281,8 +281,6 @@ func ChatHandler(service chat.Service) fiber.Handler {
 				continue
 			}
 
-			log.Printf("Received message from %s content: %s\n", c.RemoteAddr().String(), string(msg.Body))
-
 			// Insert message into database
 
 			insertedMessage, err := service.InsertMessage(int(channelIdInt), userId, msg.Body)
@@ -305,7 +303,6 @@ func ChatHandler(service chat.Service) fiber.Handler {
 				continue
 			}
 			insertedMessage.User = user
-			log.Println("Broadcasting message", string(insertedMessage.Body))
 
 			client.send <- Result{
 				Success: true,
