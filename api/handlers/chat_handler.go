@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/aramceballos/chat-group-server/pkg/chat"
+	"github.com/aramceballos/chat-group-server/pkg/entities"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt"
@@ -109,6 +110,17 @@ func validateToken(token string) (int, error) {
 	return int(userId), nil
 }
 
+func sendWSError(conn *websocket.Conn, message string) {
+	errorMessage := Result{
+		Success: false,
+		Message: message,
+	}
+	err := conn.WriteJSON(errorMessage)
+	if err != nil {
+		log.Printf("write error [error response]: %v", err)
+	}
+}
+
 func (c *Client) writePump() {
 	defer func() {
 		c.conn.Close()
@@ -135,97 +147,116 @@ func (c *Client) close() {
 	})
 }
 
-var (
-	channels   = make(map[int64]map[*websocket.Conn]*Client)
+type ChannelsHub struct {
+	channels   map[int64]map[*websocket.Conn]*Client
 	channelsMu sync.RWMutex
-)
+}
+
+func NewChannelsHub() *ChannelsHub {
+	return &ChannelsHub{
+		channels: make(map[int64]map[*websocket.Conn]*Client),
+	}
+}
+
+func (ch *ChannelsHub) AddClient(channelId int64, conn *websocket.Conn, client *Client) {
+	ch.channelsMu.Lock()
+	defer ch.channelsMu.Unlock()
+	// Create client map for channel if doesn't exist
+	if _, ok := ch.channels[channelId]; !ok {
+		ch.channels[channelId] = make(map[*websocket.Conn]*Client)
+	}
+	ch.channels[channelId][conn] = client
+}
+
+func (ch *ChannelsHub) RemoveClient(channelId int64, conn *websocket.Conn) {
+	ch.channelsMu.Lock()
+	defer ch.channelsMu.Unlock()
+	delete(ch.channels[channelId], conn)
+	// Clean up channel if empty
+	if len(ch.channels[channelId]) == 0 {
+		delete(ch.channels, channelId)
+		log.Printf("Channel %d cleaned up (empty channel)", channelId)
+	}
+}
+
+func (ch *ChannelsHub) BroadcastMessage(channelId int64, message entities.Message) {
+	ch.channelsMu.RLock()
+	clients := make([]*Client, 0, len(ch.channels[channelId]))
+	for _, client := range ch.channels[channelId] {
+		clients = append(clients, client)
+	}
+	ch.channelsMu.RUnlock()
+
+	for _, client := range clients {
+		select {
+		case client.send <- message:
+			client.failureCount = 0
+		default:
+			log.Printf("Message dropped for client %d on channel %d", client.userId, client.channelId)
+			client.failureCount++
+			client.lastFailure = time.Now()
+
+			if client.failureCount >= 5 {
+				log.Printf("Removed unresponsive client %d from channel %d", client.userId, client.channelId)
+				client.close()
+				ch.RemoveClient(channelId, client.conn)
+			}
+		}
+	}
+}
+
+var channelsHub = NewChannelsHub()
 
 func ChatHandler(service chat.Service) fiber.Handler {
-	return websocket.New(func(c *websocket.Conn) {
-		token := c.Query("token")
+	return websocket.New(func(conn *websocket.Conn) {
+		token := conn.Query("token")
 		if token == "" {
-			errorMessage := Result{
-				Success: false,
-				Message: "Token is required",
-			}
-			err := c.WriteJSON(errorMessage)
-			if err != nil {
-				log.Printf("write error [error response]: %v", err)
-				return
-			}
+			sendWSError(conn, "Token is required")
 			return
 		}
 
 		userId, err := validateToken(token)
 		if err != nil {
-			errorMessage := Result{
-				Success: false,
-				Message: err.Error(),
-			}
-			err := c.WriteJSON(errorMessage)
-			if err != nil {
-				log.Printf("write error [error response]: %v", err)
-				return
-			}
+			sendWSError(conn, err.Error())
 			return
 		}
 
-		channelId := c.Params("channelId")
 		// Cast channelId to int64
-		channelIdInt, err := strconv.ParseInt(channelId, 10, 64)
+		channelId, err := strconv.ParseInt(conn.Params("channelId"), 10, 64)
 		if err != nil {
-			log.Println("channelId error:", err)
+			sendWSError(conn, "Internal error")
 			return
 		}
 
 		// Check if user is a member of the channel
-		exists, err := service.CheckUserMembership(int(channelIdInt), userId)
+		exists, err := service.CheckUserMembership(int(channelId), userId)
 		if err != nil || !exists {
 			log.Println("error checking membership:", err)
-			errorMessage := Result{
-				Success: false,
-				Message: "You are not a member of this channel",
-			}
-			err = c.WriteJSON(errorMessage)
-			if err != nil {
-				log.Printf("write error [error response]: %v", err)
-				return
-			}
+			sendWSError(conn, "You are not a member of this channel")
 			return
 		}
 
 		// Create a new client
-		client := NewClient(c, userId, int(channelIdInt))
+		client := NewClient(conn, userId, int(channelId))
 
 		// Add client to the channel
-		channelsMu.Lock()
-		if _, ok := channels[channelIdInt]; !ok {
-			channels[channelIdInt] = make(map[*websocket.Conn]*Client)
-		}
-		channels[channelIdInt][c] = client
-		channelsMu.Unlock()
+		channelsHub.AddClient(channelId, conn, client)
 
-		log.Printf("User %d joined channel %d from IP %s\n", userId, channelIdInt, c.RemoteAddr().String())
+		log.Printf("User %d joined channel %d from IP %s\n", userId, channelId, conn.RemoteAddr().String())
 
 		go client.writePump()
 
 		// Remove client from the channel
 		defer func() {
-			log.Printf("User %d left channel %d from IP %s\n", userId, channelIdInt, c.RemoteAddr().String())
+			log.Printf("User %d left channel %d from IP %s\n", userId, channelId, conn.RemoteAddr().String())
 			client.close()
 
-			channelsMu.Lock()
-			delete(channels[channelIdInt], c)
-			if len(channels[channelIdInt]) == 0 {
-				delete(channels, channelIdInt)
-				log.Printf("Channel %d cleaned up (empty)\n", channelIdInt)
-			}
-			channelsMu.Unlock()
+			channelsHub.RemoveClient(channelId, conn)
 		}()
 
 		for {
 			msg := Message{}
-			err := c.ReadJSON(&msg.Body)
+			err := conn.ReadJSON(&msg.Body)
 			if err != nil {
 				if websocket.IsCloseError(err,
 					websocket.CloseNormalClosure,
@@ -282,8 +313,7 @@ func ChatHandler(service chat.Service) fiber.Handler {
 			}
 
 			// Insert message into database
-
-			insertedMessage, err := service.InsertMessage(int(channelIdInt), userId, msg.Body)
+			insertedMessage, err := service.InsertMessage(int(channelId), userId, msg.Body)
 			if err != nil {
 				log.Println("error inserting message:", err)
 				client.send <- Result{
@@ -309,43 +339,7 @@ func ChatHandler(service chat.Service) fiber.Handler {
 				Message: "Message sent successfully",
 			}
 
-			// Send message to all clients
-			channelsMu.RLock()
-			clients := make([]*Client, 0, len(channels[channelIdInt]))
-			for _, cl := range channels[channelIdInt] {
-				clients = append(clients, cl)
-			}
-			channelsMu.RUnlock()
-
-			for _, client := range clients {
-				select {
-				case client.send <- insertedMessage:
-					client.failureCount = 0
-				default:
-					client.failureCount++
-					client.lastFailure = time.Now()
-
-					log.Printf("Message dropped (buffer full): client_user=%d, sender_user=%d, channel=%d, failures=%d", client.userId, userId, client.channelId, client.failureCount)
-
-					if client.failureCount >= 5 {
-						log.Printf("Removing unresponsive client: user=%d, channel=%d", client.userId, client.channelId)
-						channelsMu.Lock()
-						for conn, c := range channels[channelIdInt] {
-							if c == client {
-								delete(channels[channelIdInt], conn)
-								c.close()
-								log.Printf("Removed unresponsive client: user=%d, channel=%d", client.userId, client.channelId)
-								break
-							}
-						}
-						if len(channels[channelIdInt]) == 0 {
-							delete(channels, channelIdInt)
-							log.Printf("Channel %d cleaned up (empty)", channelIdInt)
-						}
-						channelsMu.Unlock()
-					}
-				}
-			}
+			channelsHub.BroadcastMessage(channelId, insertedMessage)
 		}
 	})
 }
